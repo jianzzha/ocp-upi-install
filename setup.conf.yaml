@@ -1,0 +1,44 @@
+update_installer: false 
+#build: ga | dev
+build: ga
+version: "4.4.3"
+
+update_rhcos: false
+OPENSHIFT_RHCOS_MAJOR_REL: "4.4"
+
+## master struction has member: type(virtual|baremetal), mac, ipmi_user, ipmi_password
+master:
+- type: 'virtual'
+  mac: '52:54:00:f9:8e:20'
+- type: 'virtual'
+  mac: '52:54:00:f9:8e:21'
+- type: 'virtual'
+  mac: '52:54:00:f9:8e:22'
+
+worker:
+- type: 'baremetal'
+  mac: '3C:FD:FE:C4:F0:C0'
+  ipmi_addr: 'mgmt-e25-h31-740xd.alias.bos.scalelab.redhat.com'
+  ipmi_user: 'quads'
+  ipmi_password: 'bos@61'
+  disable_int: 
+    - eno3
+- type: 'baremetal'
+  mac: '3C:FD:FE:C4:F4:B0'
+  ipmi_addr: 'mgmt-e25-h33-740xd.alias.bos.scalelab.redhat.com'
+  ipmi_user: 'quads'
+  ipmi_password: 'bos@61'
+  disable_int: 
+    - eno3
+
+disable_firewalld: true
+disable_selinux: true
+reset_iptables: true
+baremetal_phy_int: eno1
+IPMI_PXE_DEVICE: NIC.Integrated.1-1-1
+
+skip_first_time_only_setup: false
+
+container_runtime: podman
+services_in_container: true 
+

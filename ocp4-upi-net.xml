@@ -1,0 +1,5 @@
+<network>
+  <name>ocp4-upi</name>
+  <forward mode='bridge'/>
+  <bridge name='baremetal' />
+</network>
