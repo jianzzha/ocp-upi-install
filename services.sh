@@ -10,6 +10,7 @@ fi
 
 echo start haproxy service
 [ -f haproxy/haproxy.cfg ] || { echo "haproxy/haproxy.cfg not found!"; exit 1; } 
+${container_runtime} stop ocp-haproxy || true
 ${container_runtime} rm ocp-haproxy || true
 count=$(sudo ${container_runtime} ps --filter name=ocp-haproxy --format {{.Names}} | wc -l)
 if [[ $count -eq 0 ]]; then
@@ -21,6 +22,7 @@ fi
 
 echo start httpd service 
 [ -d www ] || { echo "directory www not found!"; exit 1; }
+${container_runtime} stop ocp-httpd || true
 ${container_runtime} rm ocp-httpd || true
 count=$(sudo ${container_runtime} ps --filter name=ocp-httpd --format {{.Names}} | wc -l)
 if [[ $count -eq 0 ]]; then
@@ -31,6 +33,7 @@ fi
 
 echo "start dnsmasq service"
 [ -f dnsmasq/dnsmasq.conf ] || { echo "dnsmasq/dnsmasq.conf not found!"; exit 1; }
+${container_runtime} stop ocp-dnsmasq || true
 ${container_runtime} rm ocp-dnsmasq || true
 count=$(sudo ${container_runtime} ps --filter name=ocp-dnsmasq --format {{.Names}} | wc -l)
 if [[ $count -eq 0 ]]; then

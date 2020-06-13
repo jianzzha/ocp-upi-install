@@ -36,8 +36,11 @@ disable_selinux: true
 reset_iptables: true
 baremetal_phy_int: p7p1 
 
+# networkType: OVNKubernetes | OpenShiftSDN | Calico
+networkType: OVNKubernetes
+
 skip_first_time_only_setup: false
 
-container_runtime: podman
+container_runtime: docker 
 services_in_container: true 
 

@@ -10,8 +10,7 @@ if [ ! -f setup.conf.yaml ]; then
 fi
 
 function detect_os {
-    my_VERSION_ID=$(sed -n -r 's/VERSION_ID="?(\w+)"?/\1/p' /etc/os-release)
-    my_OS_ID=$(sed -n -r 's/ID="?(\w+)"?/\1/p' /etc/os-release)
+    source /etc/os-release
 }
 
 function add_pxe_files {
@@ -24,14 +23,19 @@ function add_pxe_files {
     /bin/rm -rf tmp_syslinux 
 }
 
+function install_docker {
+    echo "install docker"
+    sudo yum install -y yum-utils device-mapper-persistent-data lvm2
+    sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+    sudo yum install -y containerd.io-1.2.13 docker-ce-19.03.8 docker-ce-cli-19.03.8
+    start_docker_daemon
+}
+
+
 function install_runtime {
     detect_os
-    if [[ "${my_OS_ID}" == "rhel" ]]; then
-        if [[ "${container_runtime}" != "podman" ]]; then
-            echo "for rhel, only podman supported"
-            exit 1
-        fi
-        if [[ "${my_VERSION_ID}" =~ ^7 ]]; then
+    if [[ "${ID}" == "rhel" ]]; then
+        if [[ "${VERSION_ID}" =~ ^7 ]]; then
             if [[ "${container_runtime}" == "podman" ]]; then
                 local my_subscription_status=$(sudo subscription-manager status | sed -n -r 's/Overall Status: (\w+)/\1/p') 
                 if [[ "${my_subscription_status}" != "Current" ]]; then
@@ -40,28 +44,35 @@ function install_runtime {
                 fi
                 sudo subscription-manager repos --enable rhel-7-server-extras-rpms                 
                 sudo yum install -y podman
+            elif [[ "${container_runtime}" == "docker" ]]; then
+                install_docker
+            else
+                echo "For rhel7, only docker or podman is supported!"
+                exit 1
             fi
-        elif [[ "${my_VERSION_ID}" =~ ^8 ]]; then
-            sudo yum install -y podman 
+        elif [[ "${VERSION_ID}" =~ ^8 ]]; then
+            if [[ "${container_runtime}" == "podman" ]]; then
+                sudo yum install -y podman 
+            else 
+                echo "For rhel8, only podman is supported!"
+                 exit 1
+            fi
         else
             echo "for rhel, only 7 or 8 is supported"
             exit 1
         fi
-    elif [[ "${my_OS_ID}" = "centos" ]]; then
+    elif [[ "${ID}" = "centos" ]]; then
         if [[ "${container_runtime}" == "podman" ]]; then
             sudo yum install -y podman
         elif [[ "${container_runtime}" == "docker" ]]; then
-            echo "install docker"
-            yum install -y yum-utils device-mapper-persistent-data lvm2
-            yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-            yum install -y containerd.io-1.2.13 docker-ce-19.03.8 docker-ce-cli-19.03.8
-            start_docker_daemon
-       else
+            install_docker
+        else
             echo "only podman or docker supported!"
             exit 1
        fi
     else
         echo "only rhel or centos supported!"
+        exit 1
     fi
 }
 
@@ -75,7 +86,7 @@ EOF
 }
 
 function start_docker_daemon {
-mkdir /etc/docker
+mkdir -p /etc/docker
 cat > /etc/docker/daemon.json <<EOF
 {
   "iptables": false,
@@ -136,6 +147,11 @@ for cmd in virsh virt-install ipmitool ; do
     command -v $cmd >/dev/null 2>&1 || { skip_first_time_only_setup="false"; break; }
 done
 
+if [ ! -f install-config.yaml ]; then
+    skip_first_time_only_setup="false"
+fi
+
+
 if [[ "${skip_first_time_only_setup}" == "false" ]]; then 
     [ -f ~/clean-interfaces.sh ] && ~/clean-interfaces.sh --nuke
     yum -y groupinstall 'Virtualization Host'
@@ -145,6 +161,12 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     if [[ "${services_in_container}" == "false" ]]; then
         yum install -y httpd haproxy dnsmasq
     fi
+
+    /bin/cp -f install-config.yaml.tmpl install-config.yaml
+    networkType=$(yq -r '.networkType' setup.conf.yaml)
+    networkType=${networkType:-OVNKubernetes}
+    sed -i s/%%networkType%%/${networkType}/ install-config.yaml
+    echo "${networkType} inserted into install-config.yaml"
 
     echo "setup dnsmasq config file"
     mkdir -p dnsmasq
@@ -162,6 +184,7 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/master
     sed -i s/worker.ign/master.ign/ ${PXEDIR}/master
     masters=$(yq -r '.master | length' setup.conf.yaml)
+    sed -i s/%%master-replicas%%/${masters}/ install-config.yaml
     lastentry=bootstrap
     for i in $(seq 0 $((masters-1))); do
 	mac=$(yq -r .master[$i].mac setup.conf.yaml | tr '[:upper:]' '[:lower:]')
@@ -184,6 +207,7 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         fi
     done
     workers=$(yq -r '.worker | length' setup.conf.yaml)
+    sed -i s/%%worker-replicas%%/${workers}/ install-config.yaml
     for i in $(seq 0 $((workers-1))); do
         mac=$(yq -r .worker[$i].mac setup.conf.yaml | tr '[:upper:]' '[:lower:]')
         sed -i "/dhcp-host=.*,${lastentry}/a dhcp-host=${mac},192.168.222.$((30+i)),worker$i" dnsmasq/dnsmasq.conf
@@ -294,7 +318,7 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         echo "ssh key generated on bastion"
     fi
     pub_key_content=`cat ~/.ssh/id_rsa.pub`
-    sed -i -r -e "s|sshKey:.*|sshKey: ${pub_key_content}|" ${SCRIPTPATH}/install-config.yaml
+    sed -i -r -e "s|sshKey:.*|sshKey: ${pub_key_content}|" install-config.yaml
     echo "bastion ssh key inserted into install-config.yaml"
 fi
 
