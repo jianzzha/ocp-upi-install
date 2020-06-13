@@ -23,6 +23,6 @@ echo "clean up working directory"
 /bin/rm -rf *.ign
 /bin/rm -rf www
 /bin/rm -rf fix-ign-*
-
+/bin/rm -rf install-config.yaml
  
 
