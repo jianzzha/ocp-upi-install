@@ -14,6 +14,16 @@ function detect_os {
     my_OS_ID=$(sed -n -r 's/ID="?(\w+)"?/\1/p' /etc/os-release)
 }
 
+function add_pxe_files {
+    mkdir -p tmp_syslinux
+    sudo mkdir -p /var/lib/tftpboot
+    curl -s -o tmp_syslinux/syslinux.zip https://mirrors.edge.kernel.org/pub/linux/utils/boot/syslinux/syslinux-6.03.zip
+    pushd tmp_syslinux && unzip syslinux.zip && popd
+    sudo /bin/cp -f tmp_syslinux/bios/core/lpxelinux.0 /var/lib/tftpboot
+    sudo /bin/cp -f tmp_syslinux/bios/com32/elflink/ldlinux/ldlinux.c32 /var/lib/tftpboot 
+    /bin/rm -rf tmp_syslinux 
+}
+
 function install_runtime {
     detect_os
     if [[ "${my_OS_ID}" == "rhel" ]]; then
@@ -269,9 +279,10 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     if [[ ${services_in_container} == "false" ]]; then
          sudo cp haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg
          sudo cp dnsmasq/dnsmasq.conf /etc/dnsmasq.conf
+         add_pxe_files
          sed -i s/Listen\ 80/Listen\ 81/ /etc/httpd/conf/httpd.conf
-         systemctl enable haproxy httpd dnsmasq
-         systemctl restart haproxy httpd dnsmasq 
+         sudo systemctl enable haproxy httpd dnsmasq
+         sudo systemctl restart haproxy httpd dnsmasq 
          echo "haproxy httpd dnsmasq started on bastion as systemd service"
     else
          sh services.sh
