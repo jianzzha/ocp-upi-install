@@ -21,7 +21,7 @@ echo "clean up tftpboot directory on bastion"
 sudo /bin/rm -rf /var/lib/tftpboot/pxelinux.cfg
 
 echo "clean up www directory on bastion"
-sudo bin/rm -rf /var/www/html/*ign
+sudo /bin/rm -rf /var/www/html/*ign
 
 echo "clean up working directory, except images"
 /bin/rm -rf pxelinux.cfg

@@ -398,13 +398,22 @@ cp install-config.yaml ~/ocp4-upi-install-1
 
 pushd ~/ocp4-upi-install-1
 openshift-install create manifests
+# disable pod schedule on master nodes
 sed -i s/mastersSchedulable.*/mastersSchedulable:\ False/ manifests/cluster-scheduler-02-config.yml
+
+# copy extra manifest files
+if [[ -d $SCRIPTPATH/manifests ]]; then
+    for f in $(ls $SCRIPTPATH/manifests/*.yaml); do
+        /bin/cp -f $f manifests/
+    done
+fi
+ 
 echo "create ignition files"
 openshift-install create ignition-configs
 /usr/bin/cp -f *.ign ${dir_httpd} 
 popd
 
-echo "setup kube link"
+echo "copy kubeconfig file"
 [ -d ~/.kube ] || mkdir -p ~/.kube
 [ -L ~/.kube/config ] && /bin/rm -rf ~/.kube/config
 [ -e ~/.kube/config ] && /bin/mv -f ~/.kube/config ~/.kube/config.bak
