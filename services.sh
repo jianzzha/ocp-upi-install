@@ -34,7 +34,7 @@ echo "start dnsmasq service"
 ${container_runtime} rm ocp-dnsmasq || true
 count=$(sudo ${container_runtime} ps --filter name=ocp-dnsmasq --format {{.Names}} | wc -l)
 if [[ $count -eq 0 ]]; then
-    sudo ${container_runtime} run -dit --name ocp-dnsmasq -v dnsmasq:/etc/dnsmasq.d -v pxelinux.cfg:/var/lib/tftpboot/pxelinux.cfg --cap-add=NET_ADMIN --net=host quay.io/jianzzha/dnsmasq -d -q --conf-dir=/etc/dnsmasq.d
+    sudo ${container_runtime} run -dit --name ocp-dnsmasq -v dnsmasq:/etc/dnsmasq.d -v pxelinux.cfg:/var/lib/tftpboot/pxelinux.cfg --cap-add=NET_ADMIN --net=host quay.io/jianzzha/dnsmasq -d -q --conf-dir=/etc/dnsmasq.d --enable-tftp --tftp-root=/var/lib/tftpboot --log-queries --log-dhcp
 else
     sudo ${container_runtime} kill -s HUP ocp-dnsmasq
 fi
