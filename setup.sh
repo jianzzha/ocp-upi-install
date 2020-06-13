@@ -176,11 +176,11 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     PXEDIR="${dir_tftpboot}/pxelinux.cfg"
     mkdir -p ${PXEDIR}
     /bin/cp -f pxelinux-cfg.tmpl ${PXEDIR}/worker
-    ln -sf ${PXEDIR}/worker ${PXEDIR}/default
+    /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/default
     /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/bootstrap
     # bootstrap is a VM with hardcode mac address
     sed -i s/worker.ign/bootstrap.ign/ ${PXEDIR}/bootstrap
-    ln -sf ${PXEDIR}/bootstrap ${PXEDIR}/01-52-54-00-f9-8e-41
+    /bin/cp -f ${PXEDIR}/bootstrap ${PXEDIR}/01-52-54-00-f9-8e-41
     /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/master
     sed -i s/worker.ign/master.ign/ ${PXEDIR}/master
     masters=$(yq -r '.master | length' setup.conf.yaml)
@@ -193,12 +193,12 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         m=$(echo $mac | sed s/\:/-/g | tr '[:upper:]' '[:lower:]')
         disable_ifs=$(yq -r ".master[$i].disable_int | length" setup.conf.yaml)
         if ((disable_ifs == 0)); then
-            ln -sf ${PXEDIR}/master ${PXEDIR}/01-${m}
+            /bin/cp -f ${PXEDIR}/master ${PXEDIR}/01-${m}
         else
             /bin/cp -f ${PXEDIR}/master ${PXEDIR}/master${i}
             ### setup individual ign file
             sed -i s/master.ign/master${i}.ign/ ${PXEDIR}/master${i}
-            ln -sf ${PXEDIR}/master${i} ${PXEDIR}/01-${m}
+            /bin/cp -f ${PXEDIR}/master${i} ${PXEDIR}/01-${m}
             mkdir -p fix-ign-master${i}/etc/sysconfig/network-scripts/
             for j in $(seq 0 $((disable_ifs-1))); do
                 ifname=$(yq -r .master[$i].disable_int[$j] setup.conf.yaml)
@@ -215,12 +215,12 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         m=$(echo $mac | sed s/\:/-/g | tr '[:upper:]' '[:lower:]')
         disable_ifs=$(yq -r ".worker[$i].disable_int | length" setup.conf.yaml)
         if ((disable_ifs == 0)); then
-            ln -sf ${PXEDIR}/worker ${PXEDIR}/01-${m}
+            /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/01-${m}
         else
             /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/worker${i} 
             ### setup individual ign file
             sed -i s/worker.ign/worker${i}.ign/ ${PXEDIR}/worker${i} 
-            ln -sf ${PXEDIR}/worker${i} ${PXEDIR}/01-${m}
+            /bin/cp -f ${PXEDIR}/worker${i} ${PXEDIR}/01-${m}
             mkdir -p fix-ign-worker${i}/etc/sysconfig/network-scripts/
             for j in $(seq 0 $((disable_ifs-1))); do
                 ifname=$(yq -r .worker[$i].disable_int[$j] setup.conf.yaml)
@@ -408,7 +408,7 @@ echo "setup kube link"
 [ -d ~/.kube ] || mkdir -p ~/.kube
 [ -L ~/.kube/config ] && /bin/rm -rf ~/.kube/config
 [ -e ~/.kube/config ] && /bin/mv -f ~/.kube/config ~/.kube/config.bak
-ln -sf ~/ocp4-upi-install-1/auth/kubeconfig ~/.kube/config
+/bin/cp -f ~/ocp4-upi-install-1/auth/kubeconfig ~/.kube/config
 
 for d in $(ls -d fix-ign-master*); do
     node=$(echo $d | sed -r 's/fix-ign-(master.*)/\1/')
