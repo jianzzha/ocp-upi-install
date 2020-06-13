@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -euo pipefail
+set -exuo pipefail
 
 SCRIPTPATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 
@@ -12,11 +12,11 @@ fi
 function detect_os {
     my_VERSION_ID=$(sed -n -r 's/VERSION_ID="?(\w+)"?/\1/p' /etc/os-release)
     my_OS_ID=$(sed -n -r 's/ID="?(\w+)"?/\1/p' /etc/os-release)
-fi
+}
 
 function install_runtime {
     detect_os
-    if [[ "${my_OS_ID} = "rhel" ]]; then
+    if [[ "${my_OS_ID}" == "rhel" ]]; then
         if [[ "${container_runtime}" != "podman" ]]; then
             echo "for rhel, only podman supported"
             exit 1
@@ -24,7 +24,7 @@ function install_runtime {
         if [[ "${my_VERSION_ID}" =~ ^7 ]]; then
             if [[ "${container_runtime}" == "podman" ]]; then
                 local my_subscription_status=$(sudo subscription-manager status | sed -n -r 's/Overall Status: (\w+)/\1/p') 
-                if [[ "${my_subscription_status} != "Current" ]]; then
+                if [[ "${my_subscription_status}" != "Current" ]]; then
                     echo "please register this system before proceed!"
                     exit 1
                 fi
@@ -37,15 +37,18 @@ function install_runtime {
             echo "for rhel, only 7 or 8 is supported"
             exit 1
         fi
-    elif [[ "${my_OS_ID} = "centos" ]]; then
+    elif [[ "${my_OS_ID}" = "centos" ]]; then
         if [[ "${container_runtime}" == "podman" ]]; then
             sudo yum install -y podman
-        else [[ "${container_runtime}" == "docker" ]]; then
+        elif [[ "${container_runtime}" == "docker" ]]; then
             echo "install docker"
             yum install -y yum-utils device-mapper-persistent-data lvm2
             yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
             yum install -y containerd.io-1.2.13 docker-ce-19.03.8 docker-ce-cli-19.03.8
             start_docker_daemon
+       else
+            echo "only podman or docker supported!"
+            exit 1
        fi
     else
         echo "only rhel or centos supported!"
@@ -83,9 +86,6 @@ systemctl enable --now docker
 }
 
  
-echo "delete existing VMs"
-./cleanup.sh
-
 if ! command -v yq >/dev/null 2>&1; then
     echo "install python3 and tools"
     yum -y install jq python3 python3-pip 
@@ -116,14 +116,17 @@ else
     dir_tftpboot=/var/lib/tftpboot
 fi
 
-if ! iptables -t nat -L POSTROUTING | egrep "MASQUERADE.*anywhere.*anywhere"; then
-    echo "first time setup wasn't done, please enable it via skip_first_time_only_setup"
-    exit 1
-fi
- 
 skip_first_time_only_setup=$(yq -r '.skip_first_time_only_setup' setup.conf.yaml)
 
-if [[ "${skip_first_time_only_setup:-false}" == "false" ]]; then 
+if ! iptables -t nat -L POSTROUTING | egrep "MASQUERADE.*anywhere.*anywhere"; then
+    skip_first_time_only_setup="false"
+fi
+
+for cmd in virsh virt-install ipmitool ; do
+    command -v $cmd >/dev/null 2>&1 || { skip_first_time_only_setup="false"; break; }
+done
+
+if [[ "${skip_first_time_only_setup}" == "false" ]]; then 
     [ -f ~/clean-interfaces.sh ] && ~/clean-interfaces.sh --nuke
     yum -y groupinstall 'Virtualization Host'
     yum -y install ipmitool wget virt-install vim-enhanced git tmux
@@ -141,28 +144,28 @@ if [[ "${skip_first_time_only_setup:-false}" == "false" ]]; then
     PXEDIR="${dir_tftpboot}/pxelinux.cfg"
     mkdir -p ${PXEDIR}
     /bin/cp -f pxelinux-cfg.tmpl ${PXEDIR}/worker
-    ln -s ${PXEDIR}/worker ${PXEDIR}/default
+    ln -sf ${PXEDIR}/worker ${PXEDIR}/default
     /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/bootstrap
     # bootstrap is a VM with hardcode mac address
     sed -i s/worker.ign/bootstrap.ign/ ${PXEDIR}/bootstrap
-    ln -s ${PXEDIR}/bootstrap ${PXEDIR}/01-52-54-00-f9-8e-41
+    ln -sf ${PXEDIR}/bootstrap ${PXEDIR}/01-52-54-00-f9-8e-41
     /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/master
     sed -i s/worker.ign/master.ign/ ${PXEDIR}/master
     masters=$(yq -r '.master | length' setup.conf.yaml)
     lastentry=bootstrap
     for i in $(seq 0 $((masters-1))); do
-	mac=$(yq -r .master[$i].mac setup.conf.yaml)
+	mac=$(yq -r .master[$i].mac setup.conf.yaml | tr '[:upper:]' '[:lower:]')
         sed -i "/dhcp-host=.*,${lastentry}/a dhcp-host=${mac},192.168.222.2${i},master$i" dnsmasq/dnsmasq.conf 
         lastentry=master$i
         m=$(echo $mac | sed s/\:/-/g | tr '[:upper:]' '[:lower:]')
         disable_ifs=$(yq -r ".master[$i].disable_int | length" setup.conf.yaml)
         if ((disable_ifs == 0)); then
-            ln -s ${PXEDIR}/master ${PXEDIR}/01-${m}
+            ln -sf ${PXEDIR}/master ${PXEDIR}/01-${m}
         else
             /bin/cp -f ${PXEDIR}/master ${PXEDIR}/master${i}
             ### setup individual ign file
-            sed -i s/master.ign/master${i}.ign/${PXEDIR}/master${i}
-            ln -s ${PXEDIR}/master${i} ${PXEDIR}/01-${m}
+            sed -i s/master.ign/master${i}.ign/ ${PXEDIR}/master${i}
+            ln -sf ${PXEDIR}/master${i} ${PXEDIR}/01-${m}
             mkdir -p fix-ign-master${i}/etc/sysconfig/network-scripts/
             for j in $(seq 0 $((disable_ifs-1))); do
                 ifname=$(yq -r .master[$i].disable_int[$j] setup.conf.yaml)
@@ -172,17 +175,18 @@ if [[ "${skip_first_time_only_setup:-false}" == "false" ]]; then
     done
     workers=$(yq -r '.worker | length' setup.conf.yaml)
     for i in $(seq 0 $((workers-1))); do
-        mac=$(yq -r .worker[$i].mac setup.conf.yaml)
+        mac=$(yq -r .worker[$i].mac setup.conf.yaml | tr '[:upper:]' '[:lower:]')
         sed -i "/dhcp-host=.*,${lastentry}/a dhcp-host=${mac},192.168.222.$((30+i)),worker$i" dnsmasq/dnsmasq.conf
+        lastentry=worker$i
         m=$(echo $mac | sed s/\:/-/g | tr '[:upper:]' '[:lower:]')
         disable_ifs=$(yq -r ".worker[$i].disable_int | length" setup.conf.yaml)
         if ((disable_ifs == 0)); then
-            ln -s ${PXEDIR}/worker ${PXEDIR}/01-${m}
+            ln -sf ${PXEDIR}/worker ${PXEDIR}/01-${m}
         else
             /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/worker${i} 
             ### setup individual ign file
-            sed -i s/worker.ign/worker${i}.ign/${PXEDIR}/worker${i} 
-            ln -s ${PXEDIR}/worker${i} ${PXEDIR}/01-${m}
+            sed -i s/worker.ign/worker${i}.ign/ ${PXEDIR}/worker${i} 
+            ln -sf ${PXEDIR}/worker${i} ${PXEDIR}/01-${m}
             mkdir -p fix-ign-worker${i}/etc/sysconfig/network-scripts/
             for j in $(seq 0 $((disable_ifs-1))); do
                 ifname=$(yq -r .worker[$i].disable_int[$j] setup.conf.yaml)
@@ -197,9 +201,9 @@ if [[ "${skip_first_time_only_setup:-false}" == "false" ]]; then
     sudo nmcli con up baremetal
 
     BM_IF=$(yq -r .baremetal_phy_int setup.conf.yaml)
-    if [ -n "${BM_IF} ]; then
-        sudo nmcli con down $BM_IF
-        sudo nmcli con del $BM_IF
+    if [ -n "${BM_IF}" ]; then
+        sudo nmcli con down $BM_IF || true
+        sudo nmcli con del $BM_IF || true
         sudo nmcli con add type bridge-slave autoconnect yes con-name $BM_IF ifname $BM_IF master baremetal
         sudo nmcli con reload $BM_IF
         sudo nmcli con up $BM_IF
@@ -216,14 +220,16 @@ if [[ "${skip_first_time_only_setup:-false}" == "false" ]]; then
     disable_selinux=$(yq -r .disable_selinux setup.conf.yaml)
     if [[ "${disable_selinux}" == "true" ]]; then
         echo "disable selinux"
-        sudo setenforce 0
+        sudo setenforce 0 || true
         sudo sed -i --follow-symlinks 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/sysconfig/selinux
+        echo "selinux disabled"
     fi 
     
     echo "disable libvirt default network"
     if virsh net-list | grep default; then
         sudo virsh net-destroy default
         sudo virsh net-undefine default
+        echo "virsh default network destroyed"
     fi
     
     echo "setup libvirt network ocp4-upi"
@@ -231,6 +237,7 @@ if [[ "${skip_first_time_only_setup:-false}" == "false" ]]; then
         virsh net-define ocp4-upi-net.xml
         virsh net-autostart ocp4-upi
         virsh net-start ocp4-upi
+        echo "virsh network ocp4-upi started"
     fi
    
     reset_iptables=$(yq -r .reset_iptables setup.conf.yaml)  
@@ -240,12 +247,14 @@ if [[ "${skip_first_time_only_setup:-false}" == "false" ]]; then
         sudo iptables -X
         sudo iptables -F -t nat
         sudo iptables -X -t nat
+        echo "iptables flushed"
     fi
 
     if ! iptables -t nat -L POSTROUTING | egrep "MASQUERADE.*anywhere.*anywhere"; then
         oif=$(ip route | sed -n -r '0,/default/s/.* dev (\w+).*/\1/p')
         sudo iptables -t nat -A POSTROUTING -s 192.168.222.0/24 ! -d 192.168.222.0/24 -o $oif -j MASQUERADE
         sed -i "/^except-interface=lo/a except-interface=${oif}" dnsmasq/dnsmasq.conf 
+        echo "MASQUERADE set on bastion"
     fi
     sudo echo 1 > /proc/sys/net/ipv4/ip_forward
     
@@ -253,24 +262,29 @@ if [[ "${skip_first_time_only_setup:-false}" == "false" ]]; then
     sed -i 's/^search.*/search test.myocp4.com/' /etc/resolv.conf
     if ! grep 192.168.222.1 /etc/resolv.conf; then
         sed -i '/^search/a nameserver\ 192.168.222.1' /etc/resolv.conf
+        echo "bastion /etc/resolv.conf updated"
     fi
 
-    if [[ ${services_in_container} == "false"; then
+    mkdir -p ${dir_httpd}
+    if [[ ${services_in_container} == "false" ]]; then
          sudo cp haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg
          sudo cp dnsmasq/dnsmasq.conf /etc/dnsmasq.conf
          sed -i s/Listen\ 80/Listen\ 81/ /etc/httpd/conf/httpd.conf
          systemctl enable haproxy httpd dnsmasq
          systemctl restart haproxy httpd dnsmasq 
+         echo "haproxy httpd dnsmasq started on bastion as systemd service"
     else
-         sh services.sh 
+         sh services.sh
+         echo "service runs in containers"
     fi
 
     if ! [[ -f ~/.ssh/id_rsa ]]; then
         ssh-keygen -f ~/.ssh/id_rsa -q -N ""
+        echo "ssh key generated on bastion"
     fi
     pub_key_content=`cat ~/.ssh/id_rsa.pub`
     sed -i -r -e "s|sshKey:.*|sshKey: ${pub_key_content}|" ${SCRIPTPATH}/install-config.yaml
-
+    echo "bastion ssh key inserted into install-config.yaml"
 fi
 
 update_installer=$(yq -r '.update_installer' setup.conf.yaml)
@@ -284,7 +298,11 @@ fi
 if [[ "${update_installer:-false}" == "true" ]]; then
     echo "download openshift images"
 
-    if [ "${build}" == "dev" ]; then
+    build=$(yq -r .build setup.conf.yaml)
+    build=${build:-ga}
+    version=$(yq -r .version setup.conf.yaml)
+
+    if [[ "${build}" == "dev" ]]; then
         release_url="https://mirror.openshift.com/pub/openshift-v4/clients/ocp-dev-preview"
     else
         release_url="https://mirror.openshift.com/pub/openshift-v4/clients/ocp"
@@ -304,7 +322,7 @@ if [[ "${update_installer:-false}" == "true" ]]; then
 fi
 
 update_rhcos=$(yq -r '.update_rhcos' setup.conf.yaml)
-if [[ "${services_in_container}" == "true" && ! -f /www/metal ]]; then
+if [[ "${services_in_container}" == "true" && ! -f www/metal ]]; then
     update_rhcos=true
 fi
 if [[ "${services_in_container}" == "false" && ! -f /var/www/html/metal ]]; then
@@ -312,26 +330,28 @@ if [[ "${services_in_container}" == "false" && ! -f /var/www/html/metal ]]; then
 fi
 
 if [[ "${update_rhcos}" == "true" ]]; then
-    OPENSHIFT_RHCOS_MINOR_REL="$(curl -sS https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/$OPENSHIFT_RHCOS_MAJOR_REL/latest/ | grep rhcos-$OPENSHIFT_RHCOS_MAJOR_REL | head -1 | cut -d '-' -f 2)"
-    RHCOS_IMAGES_BASE_URI="https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/$OPENSHIFT_RHCOS_MAJOR_REL/latest/"
+    rhcos_major_rel=$(yq -r '.rhcos_major_rel' setup.conf.yaml)
+    OPENSHIFT_RHCOS_MINOR_REL="$(curl -sS https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/$rhcos_major_rel/latest/ | grep rhcos-$rhcos_major_rel | head -1 | cut -d '-' -f 2)"
+    RHCOS_IMAGES_BASE_URI="https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/$rhcos_major_rel/latest/"
     SHA256=$(curl -sS "$RHCOS_IMAGES_BASE_URI"sha256sum.txt)
-    ramdisk="$(echo "$SHA256" | grep installer-initramfs | rev | cut -d ' ' -f 1 | rev)"
-    kernel="$(echo "$SHA256" | grep installer-kernel | rev | cut -d ' ' -f 1 | rev)"
-    metal="$(echo "$SHA256" | grep x86_64-metal | rev | cut -d ' ' -f 1 | rev)"
+    declare -A images
+    images[ramdisk]="$(echo "$SHA256" | grep installer-initramfs | rev | cut -d ' ' -f 1 | rev)"
+    images[kernel]="$(echo "$SHA256" | grep installer-kernel | rev | cut -d ' ' -f 1 | rev)"
+    images[metal]="$(echo "$SHA256" | grep x86_64-metal | rev | cut -d ' ' -f 1 | rev)"
     mkdir -p ${dir_httpd} && chmod a+rx ${dir_httpd} 
     for image in ramdisk kernel metal; do
         if [ -f ${dir_httpd}/${image} ]; then
-            expected=$(echo "$SHA256" | grep $metal | cut -d ' ' -f 1)
-            existing=$(sha256sum ${dir_httpd}/${image} | awk '{print $1}')
+            expected=$(echo "$SHA256" | grep ${images[$image]} | cut -d ' ' -f 1)
+            existing=$(sha256sum ${dir_httpd}/${images[$image]} | awk '{print $1}')
             if [[ "${existing}" == "${expected}" ]]; then
                 printf "%s already present with correct sha256sum..skipping...\n" "$image"
                 continue
             else
                 /bin/rm -rf ${dir_httpd}/${image}
+            fi
         fi
-        curl -L -o ${dir_httpd}/${image} "$RHCOS_IMAGES_BASE_URI/${image}"
+        curl -L -o ${dir_httpd}/${image} "$RHCOS_IMAGES_BASE_URI/${images[$image]}"
     done
-    chmod a+rx ${dir_httpd}/*
 fi
 
 echo "remove exisiting install directory"
@@ -353,21 +373,25 @@ echo "setup kube link"
 [ -d ~/.kube ] || mkdir -p ~/.kube
 [ -L ~/.kube/config ] && /bin/rm -rf ~/.kube/config
 [ -e ~/.kube/config ] && /bin/mv -f ~/.kube/config ~/.kube/config.bak
-ln -s ~/ocp4-upi-install-1/auth/kubeconfig ~/.kube/config
+ln -sf ~/ocp4-upi-install-1/auth/kubeconfig ~/.kube/config
 
-for d in $(ls fix-ign-master*); do
-    node=$(echo $d | sed -r '/fix-ign-(master.*)/\1/')
+for d in $(ls -d fix-ign-master*); do
+    node=$(echo $d | sed -r 's/fix-ign-(master.*)/\1/')
     /usr/bin/cp -f ~/ocp4-upi-install-1/master.ign ./ 
     filetranspile -i master.ign -f $d -o ${node}.ign
     /usr/bin/cp -f ${node}.ign ${dir_httpd} 
-fi
+done
 
-for d in $(ls fix-ign-worker*); do
-    node=$(echo $d | sed -r '/fix-ign-(worker.*)/\1/')
+for d in $(ls -d fix-ign-worker*); do
+    node=$(echo $d | sed -r 's/fix-ign-(worker.*)/\1/')
     /usr/bin/cp -f ~/ocp4-upi-install-1/worker.ign ./
     filetranspile -i worker.ign -f $d -o ${node}.ign
     /usr/bin/cp -f ${node}.ign ${dir_httpd}    
-fi
+done
+
+chmod a+rx ${dir_httpd}/*
+
+./delete-vm.sh
 
 echo "start bootstrap VM ..."
 virt-install -n ocp4-upi-bootstrap --pxe --os-type=Linux --os-variant=rhel8.0 --ram=8192 --vcpus=4 --network network=ocp4-upi,mac=52:54:00:f9:8e:41 --disk size=60,bus=scsi,sparse=yes --check disk_size=off --noautoconsole
@@ -385,7 +409,7 @@ masters=$(yq -r '.master | length' setup.conf.yaml)
 for i in $(seq 0 $((masters-1))); do
     type=$(yq -r .master[$i].type setup.conf.yaml)
     if [[ ${type} == "virtual" ]]; then
-        ((vmcount++))
+        vmcount=$((vmcount+1))
         mac=$(yq -r .master[$i].mac setup.conf.yaml)
         virt-install -n ocp4-upi-master${i} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network network=ocp4-upi,mac=${mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole;
     else
@@ -402,10 +426,11 @@ while [[ ${vmcount} -gt 0 ]]; do
         if virsh list --all | grep 'shut off'; then
             vm=$(virsh list --state-shutoff | awk '/shut off/{print $2; exit;}')
             virsh start ${vm}
-            ((vmcount--)) 
+            vmcount=$((vmcount-1)) 
         fi
 done
 
+exit 1
 openshift-install wait-for bootstrap-complete --log-level debug
 
 echo "start worker ..."
@@ -414,9 +439,9 @@ workers=$(yq -r '.worker | length' setup.conf.yaml)
 for i in $(seq 0 $((workers-1))); do
     type=$(yq -r .worker[$i].type setup.conf.yaml)
     if [[ ${type} == "virtual" ]]; then
-        ((vmcount++))
+        vmcount=$((vmcount+1))
         mac=$(yq -r .worker[$i].mac setup.conf.yaml)
-        virt-install -n ocp4-upi-worker${i} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network network=ocp4-upi,mac=${mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole;
+        virt-install -n ocp4-upi-worker${i} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network network=ocp4-upi,mac=${mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole
     else
         ipmi_addr=$(yq -r .worker[$i].ipmi_addr setup.conf.yaml)
         ipmi_user=$(yq -r .worker[$i].ipmi_user setup.conf.yaml)
@@ -431,7 +456,7 @@ while [[ ${vmcount} -gt 0 ]]; do
         if virsh list --all | grep 'shut off'; then
             vm=$(virsh list --state-shutoff | awk '/shut off/{print $2; exit;}')
             virsh start ${vm}
-            ((vmcount--)) 
+            vmcount=$((vmcount-1)) 
         fi
 done
 
