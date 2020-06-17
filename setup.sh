@@ -139,7 +139,7 @@ fi
 
 skip_first_time_only_setup=$(yq -r '.skip_first_time_only_setup' setup.conf.yaml)
 
-if ! iptables -t nat -L POSTROUTING | egrep "MASQUERADE.*anywhere.*anywhere"; then
+if ! iptables -t nat -S POSTROUTING | egrep -- 'POSTROUTING -s 192.168.222.0.*-j MASQUERADE'; then
     skip_first_time_only_setup="false"
 fi
 
@@ -377,7 +377,7 @@ if [[ "${update_rhcos}" == "true" ]]; then
     for image in ramdisk kernel metal; do
         if [ -f ${dir_httpd}/${image} ]; then
             expected=$(echo "$SHA256" | grep ${images[$image]} | cut -d ' ' -f 1)
-            existing=$(sha256sum ${dir_httpd}/${images[$image]} | awk '{print $1}')
+            existing=$(sha256sum ${dir_httpd}/${image} | awk '{print $1}')
             if [[ "${existing}" == "${expected}" ]]; then
                 printf "%s already present with correct sha256sum..skipping...\n" "$image"
                 continue
@@ -403,7 +403,7 @@ sed -i s/mastersSchedulable.*/mastersSchedulable:\ False/ manifests/cluster-sche
 
 # copy extra manifest files
 if [[ -d $SCRIPTPATH/manifests ]]; then
-    for f in $(ls $SCRIPTPATH/manifests/*.yaml); do
+    for f in $(ls $SCRIPTPATH/manifests/*.yaml 2>/dev/null); do
         /bin/cp -f $f manifests/
     done
 fi
@@ -508,7 +508,7 @@ count=$((worker*2))
 while ((count > 0)); do
   echo "waiting for Pending csr"
   if oc get csr | grep Pending; then
-    csr=$(oc get csr | grep Pending | awk '{print$1}')
+    csr=$(oc get csr | awk '/Pending/ {print$1; exit;}')
     oc adm certificate approve $csr
     ((count--))
   fi

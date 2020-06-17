@@ -8,8 +8,8 @@ container_runtime=$(yq -r '.container_runtime' setup.conf.yaml)
 echo "stop container haproxy dnsmasq httpd services"
 
 for c in ocp-haproxy ocp-httpd ocp-dnsmasq; do
-    ${container_runtime} stop $c || true
-    ${container_runtime} rm $c || true
+    ${container_runtime} stop $c 2>/dev/null || true
+    ${container_runtime} rm $c 2>/dev/null || true
 done
 
 echo "stop bastion haproxy dnsmasq httpd services"

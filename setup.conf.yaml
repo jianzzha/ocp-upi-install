@@ -1,9 +1,10 @@
-update_installer: false 
+update_installer: true 
 #build: ga | dev
-build: ga
-version: "4.4.3"
+build: ga 
+#version: "4.4.3"
+version: "candidate-4.5"
 
-update_rhcos: false
+update_rhcos: false 
 rhcos_major_rel: "4.4"
 
 ## master struction has member: type(virtual|baremetal), mac, ipmi_user, ipmi_password
@@ -37,10 +38,10 @@ reset_iptables: true
 baremetal_phy_int: p7p1 
 
 # networkType: OVNKubernetes | OpenShiftSDN | Calico
-networkType: OVNKubernetes
+networkType: OVNKubernetes 
 
-skip_first_time_only_setup: false
+skip_first_time_only_setup: true 
 
-container_runtime: docker 
-services_in_container: true 
+container_runtime: podman 
+services_in_container: false 
 
