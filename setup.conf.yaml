@@ -1,13 +1,21 @@
+# whether or not update the openshift installer binary
 update_installer: true 
+# use released(or candidate) openshift installer binary
 #build: ga | dev
 build: ga 
-#version: "4.4.3"
-version: "candidate-4.5"
+# openshift installer version; for ga, find it here: https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
+#			      for dev, find it here: https://mirror.openshift.com/pub/openshift-v4/clients/ocp-dev-preview/ 
+version: "4.4.3"
+#version: "candidate-4.5"
 
-update_rhcos: false 
+# whether or not update the rhcos image; the rhos version does not need to match the installer, e.g. 4.4 rhcos may work with 4.5 installer
+update_rhcos: false
+# rhcos version 
 rhcos_major_rel: "4.4"
 
-## master struction has member: type(virtual|baremetal), mac, ipmi_user, ipmi_password
+# master struction has member: type(virtual|baremetal), mac, ipmi_user, ipmi_password
+# virtual host does not need to have ipmi info 
+# baremetal host: very often disable_int list is necessary to disable other dhcp interface and only keep the baremetal interface for bootp 
 master:
 - type: 'virtual'
   mac: '52:54:00:f9:8e:20'
@@ -32,16 +40,26 @@ worker:
   disable_int: 
     - eno3
 
+# disable these on the installation host
+# recommend: true
 disable_firewalld: true
 disable_selinux: true
 reset_iptables: true
+
+# This is the baremetal interface on the installation host that's used to service the bootp
 baremetal_phy_int: p7p1 
 
 # networkType: OVNKubernetes | OpenShiftSDN | Calico
 networkType: OVNKubernetes 
 
+# yum package install, iptable setup etc are considered as first time only setup; it is safe to use false 
+# recommend: false
 skip_first_time_only_setup: true 
 
-container_runtime: podman 
+# if using container to provide haproxy/httpd/dnsmasq service, what run time to use: podman or docker
+container_runtime: podman
+
+# run haproxy/httpd/dnsmasq service in the installtion host or container. The host level service is verified, there may be problem with container
+# recommend: false  
 services_in_container: false 
 

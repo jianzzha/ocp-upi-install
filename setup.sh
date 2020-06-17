@@ -143,7 +143,7 @@ if ! iptables -t nat -S POSTROUTING | egrep -- 'POSTROUTING -s 192.168.222.0.*-j
     skip_first_time_only_setup="false"
 fi
 
-for cmd in virsh virt-install ipmitool ; do
+for cmd in virsh virt-install ipmitool tmux; do
     command -v $cmd >/dev/null 2>&1 || { skip_first_time_only_setup="false"; break; }
 done
 
@@ -474,8 +474,7 @@ while [[ ${vmcount} -gt 0 ]]; do
         fi
 done
 
-exit 1
-openshift-install wait-for bootstrap-complete --log-level debug
+openshift-install --dir ~/ocp4-upi-install-1 wait-for bootstrap-complete
 
 echo "start worker ..."
 vmcount=0
@@ -504,16 +503,20 @@ while [[ ${vmcount} -gt 0 ]]; do
         fi
 done
 
-count=$((worker*2))
-while ((count > 0)); do
-  echo "waiting for Pending csr"
-  if oc get csr | grep Pending; then
-    csr=$(oc get csr | awk '/Pending/ {print$1; exit;}')
-    oc adm certificate approve $csr
-    ((count--))
-  fi
-  sleep 5
-done
+tmux kill-session -t csr 2>/dev/null || true
+cmd="count=$((workers*2)); \
+     while ((count > 0)); do \
+         echo 'waiting for Pending csr'; \
+         if oc get csr | grep Pending; then \
+             csr=\$(oc get csr | awk '/Pending/ {print\$1; exit;}'); \
+             oc adm certificate approve \$csr; \
+             ((count--)); \
+         fi; \
+         sleep 5; \
+     done; \
+     > /root/.ssh/known_hosts"
+tmux new-session -s csr -d "${cmd}"
 
-> /root/.ssh/known_hosts
-
+echo "The baremetal machine should reboot twice; If the baremetal machine keep doing PXE boot then the BIOS boot order is incorrect. The hard drive should be the first boot device."
+echo "watch oc get clusterversion to get progress status"
+ 
