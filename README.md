@@ -19,7 +19,7 @@ currently Alias lab does not have  the hard disk as the first boot device, so al
 Here is how to do the manual intervention:
 
 1. open console connection to the baremetal machine
-1. boot to hard disk
+1. pxe boot on baremetal network
    * ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev pxe
    * ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
 1. Once the baremetal boots up and completes image download, it will reboot itself; once reboot happens,
