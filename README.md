@@ -11,7 +11,7 @@ The install options are set in setup.conf.yaml, please follow the comment line i
 
 ### prerequisites
 
-BIOS boot order on the baremetal hosts: 1. hard disk 2. PXE on the baremetal NIC. 
+**BIOS boot order on the baremetal hosts: 1. hard disk 2. PXE on the baremetal NIC.** 
 
 If BIOS boot order is not setup this way, manual intervention for baremetal hosts is required. For example, 
 currently Alias lab does not have  the hard disk as the first boot device, so alias lab requires manual intervention. 
@@ -19,14 +19,15 @@ currently Alias lab does not have  the hard disk as the first boot device, so al
 Here is how to do the manual intervention:
 
 1. open console connection to the baremetal machine
-2. ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev pxe
-   ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
-3. Once the baremetal boots up and completes image download, it will reboot itself; once reboot happens,
-   ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev disk
-   ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
-4. the baremetal machine will boot into hard disk and do some self provision and reboot again, once the reboot happens,
-   ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev disk
-   ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
+1. boot to hard disk
+   * ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev pxe
+   * ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
+1. Once the baremetal boots up and completes image download, it will reboot itself; once reboot happens,
+   * ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev disk
+   * ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
+1. the baremetal machine will boot into hard disk and do some self provision and reboot again, once the reboot happens,
+   * ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev disk
+   * ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
 
 
 
