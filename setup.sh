@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -exuo pipefail
+set -euo pipefail
 
 SCRIPTPATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 
@@ -140,6 +140,7 @@ fi
 skip_first_time_only_setup=$(yq -r '.skip_first_time_only_setup' setup.conf.yaml)
 
 if ! iptables -t nat -S POSTROUTING | egrep -- 'POSTROUTING -s 192.168.222.0.*-j MASQUERADE'; then
+    echo "MASQUERADE not set on installation host, will run through first time setup"
     skip_first_time_only_setup="false"
 fi
 
@@ -148,11 +149,13 @@ for cmd in virsh virt-install ipmitool tmux; do
 done
 
 if [ ! -f install-config.yaml ]; then
+    echo "install-config.yaml not found, will run through first time setup"
     skip_first_time_only_setup="false"
 fi
 
 
-if [[ "${skip_first_time_only_setup}" == "false" ]]; then 
+if [[ "${skip_first_time_only_setup}" == "false" ]]; then
+    echo "entering first time setup" 
     [ -f ~/clean-interfaces.sh ] && ~/clean-interfaces.sh --nuke
     yum -y groupinstall 'Virtualization Host'
     yum -y install ipmitool wget virt-install vim-enhanced git tmux
@@ -475,6 +478,9 @@ while [[ ${vmcount} -gt 0 ]]; do
 done
 
 openshift-install --dir ~/ocp4-upi-install-1 wait-for bootstrap-complete
+
+echo "delete bootstrap server ..."
+virsh destroy ocp4-upi-bootstrap
 
 echo "start worker ..."
 vmcount=0
