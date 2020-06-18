@@ -13,7 +13,7 @@ The install options are set in setup.conf.yaml, please follow the comment line i
 
 BIOS boot order on the baremetal hosts: 1. hard disk 2. nic on the baremetal network. 
 
-If BIOS boot order is setup this way, manual intervention for baremetal hosts is required. For example, 
+If BIOS boot order is not setup this way, manual intervention for baremetal hosts is required. For example, 
 currently Alias lab does not have  the hard disk as the first boot device, so alias lab requires manual intervention. 
 
 Here is how to do the manual intervention:
