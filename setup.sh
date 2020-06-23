@@ -110,7 +110,7 @@ fi
 
 if ! command -v filetranspile >/dev/null 2>&1; then
     echo "download filetranspile"
-    sudo wget -O /usr/local/bin/filetranspile https://raw.githubusercontent.com/ashcrow/filetranspiler/18/filetranspile
+    sudo curl -o /usr/local/bin/filetranspile https://raw.githubusercontent.com/ashcrow/filetranspiler/18/filetranspile
     sudo chmod u+x /usr/local/bin/filetranspile
     echo "pip install modules for filetranspile"
     pip3 install PyYAML
