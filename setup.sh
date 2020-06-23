@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -exuo pipefail
+set -euo pipefail
 
 SCRIPTPATH="$( cd "$(dirname "$0")" >/dev/null 2>&1 ; pwd -P )"
 
@@ -10,8 +10,7 @@ if [ ! -f setup.conf.yaml ]; then
 fi
 
 function detect_os {
-    my_VERSION_ID=$(sed -n -r 's/VERSION_ID="?(\w+)"?/\1/p' /etc/os-release)
-    my_OS_ID=$(sed -n -r 's/ID="?(\w+)"?/\1/p' /etc/os-release)
+    source /etc/os-release
 }
 
 function add_pxe_files {
@@ -24,14 +23,19 @@ function add_pxe_files {
     /bin/rm -rf tmp_syslinux 
 }
 
+function install_docker {
+    echo "install docker"
+    sudo yum install -y yum-utils device-mapper-persistent-data lvm2
+    sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+    sudo yum install -y containerd.io-1.2.13 docker-ce-19.03.8 docker-ce-cli-19.03.8
+    start_docker_daemon
+}
+
+
 function install_runtime {
     detect_os
-    if [[ "${my_OS_ID}" == "rhel" ]]; then
-        if [[ "${container_runtime}" != "podman" ]]; then
-            echo "for rhel, only podman supported"
-            exit 1
-        fi
-        if [[ "${my_VERSION_ID}" =~ ^7 ]]; then
+    if [[ "${ID}" == "rhel" ]]; then
+        if [[ "${VERSION_ID}" =~ ^7 ]]; then
             if [[ "${container_runtime}" == "podman" ]]; then
                 local my_subscription_status=$(sudo subscription-manager status | sed -n -r 's/Overall Status: (\w+)/\1/p') 
                 if [[ "${my_subscription_status}" != "Current" ]]; then
@@ -40,28 +44,35 @@ function install_runtime {
                 fi
                 sudo subscription-manager repos --enable rhel-7-server-extras-rpms                 
                 sudo yum install -y podman
+            elif [[ "${container_runtime}" == "docker" ]]; then
+                install_docker
+            else
+                echo "For rhel7, only docker or podman is supported!"
+                exit 1
             fi
-        elif [[ "${my_VERSION_ID}" =~ ^8 ]]; then
-            sudo yum install -y podman 
+        elif [[ "${VERSION_ID}" =~ ^8 ]]; then
+            if [[ "${container_runtime}" == "podman" ]]; then
+                sudo yum install -y podman 
+            else 
+                echo "For rhel8, only podman is supported!"
+                 exit 1
+            fi
         else
             echo "for rhel, only 7 or 8 is supported"
             exit 1
         fi
-    elif [[ "${my_OS_ID}" = "centos" ]]; then
+    elif [[ "${ID}" = "centos" ]]; then
         if [[ "${container_runtime}" == "podman" ]]; then
             sudo yum install -y podman
         elif [[ "${container_runtime}" == "docker" ]]; then
-            echo "install docker"
-            yum install -y yum-utils device-mapper-persistent-data lvm2
-            yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-            yum install -y containerd.io-1.2.13 docker-ce-19.03.8 docker-ce-cli-19.03.8
-            start_docker_daemon
-       else
+            install_docker
+        else
             echo "only podman or docker supported!"
             exit 1
        fi
     else
         echo "only rhel or centos supported!"
+        exit 1
     fi
 }
 
@@ -75,7 +86,7 @@ EOF
 }
 
 function start_docker_daemon {
-mkdir /etc/docker
+mkdir -p /etc/docker
 cat > /etc/docker/daemon.json <<EOF
 {
   "iptables": false,
@@ -128,15 +139,23 @@ fi
 
 skip_first_time_only_setup=$(yq -r '.skip_first_time_only_setup' setup.conf.yaml)
 
-if ! iptables -t nat -L POSTROUTING | egrep "MASQUERADE.*anywhere.*anywhere"; then
+if ! iptables -t nat -S POSTROUTING | egrep -- 'POSTROUTING -s 192.168.222.0.*-j MASQUERADE'; then
+    echo "MASQUERADE not set on installation host, will run through first time setup"
     skip_first_time_only_setup="false"
 fi
 
-for cmd in virsh virt-install ipmitool ; do
+for cmd in virsh virt-install ipmitool tmux; do
     command -v $cmd >/dev/null 2>&1 || { skip_first_time_only_setup="false"; break; }
 done
 
-if [[ "${skip_first_time_only_setup}" == "false" ]]; then 
+if [ ! -f install-config.yaml ]; then
+    echo "install-config.yaml not found, will run through first time setup"
+    skip_first_time_only_setup="false"
+fi
+
+
+if [[ "${skip_first_time_only_setup}" == "false" ]]; then
+    echo "entering first time setup" 
     [ -f ~/clean-interfaces.sh ] && ~/clean-interfaces.sh --nuke
     yum -y groupinstall 'Virtualization Host'
     yum -y install ipmitool wget virt-install vim-enhanced git tmux
@@ -146,6 +165,12 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         yum install -y httpd haproxy dnsmasq
     fi
 
+    /bin/cp -f install-config.yaml.tmpl install-config.yaml
+    networkType=$(yq -r '.networkType' setup.conf.yaml)
+    networkType=${networkType:-OVNKubernetes}
+    sed -i s/%%networkType%%/${networkType}/ install-config.yaml
+    echo "${networkType} inserted into install-config.yaml"
+
     echo "setup dnsmasq config file"
     mkdir -p dnsmasq
     /bin/cp -f dnsmasq.conf.tmpl dnsmasq/dnsmasq.conf
@@ -154,14 +179,15 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     PXEDIR="${dir_tftpboot}/pxelinux.cfg"
     mkdir -p ${PXEDIR}
     /bin/cp -f pxelinux-cfg.tmpl ${PXEDIR}/worker
-    ln -sf ${PXEDIR}/worker ${PXEDIR}/default
+    /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/default
     /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/bootstrap
     # bootstrap is a VM with hardcode mac address
     sed -i s/worker.ign/bootstrap.ign/ ${PXEDIR}/bootstrap
-    ln -sf ${PXEDIR}/bootstrap ${PXEDIR}/01-52-54-00-f9-8e-41
+    /bin/cp -f ${PXEDIR}/bootstrap ${PXEDIR}/01-52-54-00-f9-8e-41
     /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/master
     sed -i s/worker.ign/master.ign/ ${PXEDIR}/master
     masters=$(yq -r '.master | length' setup.conf.yaml)
+    sed -i s/%%master-replicas%%/${masters}/ install-config.yaml
     lastentry=bootstrap
     for i in $(seq 0 $((masters-1))); do
 	mac=$(yq -r .master[$i].mac setup.conf.yaml | tr '[:upper:]' '[:lower:]')
@@ -170,12 +196,12 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         m=$(echo $mac | sed s/\:/-/g | tr '[:upper:]' '[:lower:]')
         disable_ifs=$(yq -r ".master[$i].disable_int | length" setup.conf.yaml)
         if ((disable_ifs == 0)); then
-            ln -sf ${PXEDIR}/master ${PXEDIR}/01-${m}
+            /bin/cp -f ${PXEDIR}/master ${PXEDIR}/01-${m}
         else
             /bin/cp -f ${PXEDIR}/master ${PXEDIR}/master${i}
             ### setup individual ign file
             sed -i s/master.ign/master${i}.ign/ ${PXEDIR}/master${i}
-            ln -sf ${PXEDIR}/master${i} ${PXEDIR}/01-${m}
+            /bin/cp -f ${PXEDIR}/master${i} ${PXEDIR}/01-${m}
             mkdir -p fix-ign-master${i}/etc/sysconfig/network-scripts/
             for j in $(seq 0 $((disable_ifs-1))); do
                 ifname=$(yq -r .master[$i].disable_int[$j] setup.conf.yaml)
@@ -184,6 +210,7 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         fi
     done
     workers=$(yq -r '.worker | length' setup.conf.yaml)
+    sed -i s/%%worker-replicas%%/${workers}/ install-config.yaml
     for i in $(seq 0 $((workers-1))); do
         mac=$(yq -r .worker[$i].mac setup.conf.yaml | tr '[:upper:]' '[:lower:]')
         sed -i "/dhcp-host=.*,${lastentry}/a dhcp-host=${mac},192.168.222.$((30+i)),worker$i" dnsmasq/dnsmasq.conf
@@ -191,12 +218,12 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         m=$(echo $mac | sed s/\:/-/g | tr '[:upper:]' '[:lower:]')
         disable_ifs=$(yq -r ".worker[$i].disable_int | length" setup.conf.yaml)
         if ((disable_ifs == 0)); then
-            ln -sf ${PXEDIR}/worker ${PXEDIR}/01-${m}
+            /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/01-${m}
         else
             /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/worker${i} 
             ### setup individual ign file
             sed -i s/worker.ign/worker${i}.ign/ ${PXEDIR}/worker${i} 
-            ln -sf ${PXEDIR}/worker${i} ${PXEDIR}/01-${m}
+            /bin/cp -f ${PXEDIR}/worker${i} ${PXEDIR}/01-${m}
             mkdir -p fix-ign-worker${i}/etc/sysconfig/network-scripts/
             for j in $(seq 0 $((disable_ifs-1))); do
                 ifname=$(yq -r .worker[$i].disable_int[$j] setup.conf.yaml)
@@ -294,7 +321,7 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         echo "ssh key generated on bastion"
     fi
     pub_key_content=`cat ~/.ssh/id_rsa.pub`
-    sed -i -r -e "s|sshKey:.*|sshKey: ${pub_key_content}|" ${SCRIPTPATH}/install-config.yaml
+    sed -i -r -e "s|sshKey:.*|sshKey: ${pub_key_content}|" install-config.yaml
     echo "bastion ssh key inserted into install-config.yaml"
 fi
 
@@ -353,7 +380,7 @@ if [[ "${update_rhcos}" == "true" ]]; then
     for image in ramdisk kernel metal; do
         if [ -f ${dir_httpd}/${image} ]; then
             expected=$(echo "$SHA256" | grep ${images[$image]} | cut -d ' ' -f 1)
-            existing=$(sha256sum ${dir_httpd}/${images[$image]} | awk '{print $1}')
+            existing=$(sha256sum ${dir_httpd}/${image} | awk '{print $1}')
             if [[ "${existing}" == "${expected}" ]]; then
                 printf "%s already present with correct sha256sum..skipping...\n" "$image"
                 continue
@@ -374,17 +401,26 @@ cp install-config.yaml ~/ocp4-upi-install-1
 
 pushd ~/ocp4-upi-install-1
 openshift-install create manifests
+# disable pod schedule on master nodes
 sed -i s/mastersSchedulable.*/mastersSchedulable:\ False/ manifests/cluster-scheduler-02-config.yml
+
+# copy extra manifest files
+if [[ -d $SCRIPTPATH/manifests ]]; then
+    for f in $(ls $SCRIPTPATH/manifests/*.yaml 2>/dev/null); do
+        /bin/cp -f $f manifests/
+    done
+fi
+ 
 echo "create ignition files"
 openshift-install create ignition-configs
 /usr/bin/cp -f *.ign ${dir_httpd} 
 popd
 
-echo "setup kube link"
+echo "copy kubeconfig file"
 [ -d ~/.kube ] || mkdir -p ~/.kube
 [ -L ~/.kube/config ] && /bin/rm -rf ~/.kube/config
 [ -e ~/.kube/config ] && /bin/mv -f ~/.kube/config ~/.kube/config.bak
-ln -sf ~/ocp4-upi-install-1/auth/kubeconfig ~/.kube/config
+/bin/cp -f ~/ocp4-upi-install-1/auth/kubeconfig ~/.kube/config
 
 for d in $(ls -d fix-ign-master*); do
     node=$(echo $d | sed -r 's/fix-ign-(master.*)/\1/')
@@ -441,8 +477,10 @@ while [[ ${vmcount} -gt 0 ]]; do
         fi
 done
 
-exit 1
-openshift-install wait-for bootstrap-complete --log-level debug
+openshift-install --dir ~/ocp4-upi-install-1 wait-for bootstrap-complete
+
+echo "delete bootstrap server ..."
+virsh destroy ocp4-upi-bootstrap
 
 echo "start worker ..."
 vmcount=0
@@ -471,16 +509,20 @@ while [[ ${vmcount} -gt 0 ]]; do
         fi
 done
 
-count=$((worker*2))
-while ((count > 0)); do
-  echo "waiting for Pending csr"
-  if oc get csr | grep Pending; then
-    csr=$(oc get csr | grep Pending | awk '{print$1}')
-    oc adm certificate approve $csr
-    ((count--))
-  fi
-  sleep 5
-done
+tmux kill-session -t csr 2>/dev/null || true
+cmd="count=$((workers*2)); \
+     while ((count > 0)); do \
+         echo 'waiting for Pending csr'; \
+         if oc get csr | grep Pending; then \
+             csr=\$(oc get csr | awk '/Pending/ {print\$1; exit;}'); \
+             oc adm certificate approve \$csr; \
+             ((count--)); \
+         fi; \
+         sleep 5; \
+     done; \
+     > /root/.ssh/known_hosts"
+tmux new-session -s csr -d "${cmd}"
 
-> /root/.ssh/known_hosts
-
+echo "The baremetal machine should reboot twice; If the baremetal machine keep doing PXE boot then the BIOS boot order is incorrect. The hard drive should be the first boot device."
+echo "watch oc get clusterversion to get progress status"
+ 
