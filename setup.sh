@@ -106,10 +106,18 @@ systemctl daemon-reload
 systemctl enable --now docker
 }
 
- 
+if ! command -v wget >/dev/null 2>&1; then
+    sudo yum -y install wget
+fi
+
 if ! command -v yq >/dev/null 2>&1; then
     echo "install python3 and tools"
     yum -y install jq python3 python3-pip 
+    if ! command -v jq >/dev/null 2>&1; then
+	#yum failed to install jq, due to repo issue
+	sudo wget -O /usr/local/bin/jq https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64
+	sudo chmod 0755 /usr/local/bin/jq
+    fi
     pip3 install yq
 fi
 
