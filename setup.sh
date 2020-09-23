@@ -381,9 +381,9 @@ if [[ "${update_rhcos}" == "true" ]]; then
     RHCOS_IMAGES_BASE_URI="https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/$rhcos_major_rel/latest/"
     SHA256=$(curl -sS "$RHCOS_IMAGES_BASE_URI"sha256sum.txt)
     declare -A images
-    images[ramdisk]="$(echo "$SHA256" | grep installer-initramfs | rev | cut -d ' ' -f 1 | rev)"
-    images[kernel]="$(echo "$SHA256" | grep installer-kernel | rev | cut -d ' ' -f 1 | rev)"
-    images[metal]="$(echo "$SHA256" | grep x86_64-metal | rev | cut -d ' ' -f 1 | rev)"
+    images[ramdisk]=$(echo "$SHA256" | grep installer-initramfs | rev | cut -d ' ' -f 1 | rev | head -n 1)
+    images[kernel]=$(echo "$SHA256" | grep installer-kernel | rev | cut -d ' ' -f 1 | rev | head -n 1)
+    images[metal]=$(echo "$SHA256" | grep x86_64-metal | rev | cut -d ' ' -f 1 | rev | head -n 1)
     mkdir -p ${dir_httpd} && chmod a+rx ${dir_httpd} 
     for image in ramdisk kernel metal; do
         if [ -f ${dir_httpd}/${image} ]; then
