@@ -2,7 +2,7 @@
 update_installer: true 
 # use released(or candidate) openshift installer binary
 #build: ga | dev
-build: ga 
+build: ga
 # openshift installer version; for ga, find it here: https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
 #			      for dev, find it here: https://mirror.openshift.com/pub/openshift-v4/clients/ocp-dev-preview/ 
 version: "4.4.3"
@@ -26,17 +26,10 @@ master:
 
 worker:
 - type: 'baremetal'
-  mac: '3C:FD:FE:C4:EC:60'
-  ipmi_addr: 'mgmt-e25-h29-740xd.alias.bos.scalelab.redhat.com'
+  mac: '3c:fd:fe:c1:67:a0'
+  ipmi_addr: 'mgmt-e24-h23-740xd.alias.bos.scalelab.redhat.com'
   ipmi_user: 'quads'
-  ipmi_password: 'bos@61'
-  disable_int: 
-    - eno3
-- type: 'baremetal'
-  mac: '3C:FD:FE:C4:F4:B0'
-  ipmi_addr: 'mgmt-e25-h33-740xd.alias.bos.scalelab.redhat.com'
-  ipmi_user: 'quads'
-  ipmi_password: 'bos@61'
+  ipmi_password: 'bos@165'
   disable_int: 
     - eno3
 
@@ -48,6 +41,7 @@ reset_iptables: true
 
 # This is the baremetal interface on the installation host that's used to service the bootp
 baremetal_phy_int: p7p1 
+# for Alias lab, change p7p1 to em1
 
 # networkType: OVNKubernetes | OpenShiftSDN | Calico
 networkType: OVNKubernetes 
