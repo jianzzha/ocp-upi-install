@@ -161,7 +161,8 @@ if [ ! -f install-config.yaml ]; then
     skip_first_time_only_setup="false"
 fi
 
-
+rhcos_major_rel=$(yq -r '.rhcos_major_rel' setup.conf.yaml)
+ 
 if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     echo "entering first time setup" 
     [ -f ~/clean-interfaces.sh ] && ~/clean-interfaces.sh --nuke
@@ -187,6 +188,9 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     PXEDIR="${dir_tftpboot}/pxelinux.cfg"
     mkdir -p ${PXEDIR}
     /bin/cp -f pxelinux-cfg.tmpl ${PXEDIR}/worker
+    if [[ "${rhcos_major_rel}" == "4.6" || "${rhcos_major_rel}" == "4.7" ]]; then
+        /bin/cp -f pxelinux-cfg-4.6.tmpl ${PXEDIR}/worker
+    fi
     /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/default
     /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/bootstrap
     # bootstrap is a VM with hardcode mac address
@@ -241,6 +245,8 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     done
 
     sudo systemctl enable NetworkManager --now
+    sudo nmcli con down baremetal || true
+    sudo nmcli con del baremetal || true
     sudo nmcli con add type bridge ifname baremetal con-name baremetal ipv4.method manual ipv4.addr 192.168.222.1/24 ipv4.dns 192.168.222.1 ipv4.dns-priority 10 autoconnect yes bridge.stp no
     sudo nmcli con reload baremetal
     sudo nmcli con up baremetal
@@ -376,14 +382,19 @@ if [[ "${services_in_container}" == "false" && ! -f /var/www/html/metal ]]; then
 fi
 
 if [[ "${update_rhcos}" == "true" ]]; then
-    rhcos_major_rel=$(yq -r '.rhcos_major_rel' setup.conf.yaml)
     OPENSHIFT_RHCOS_MINOR_REL="$(curl -sS https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/$rhcos_major_rel/latest/ | grep rhcos-$rhcos_major_rel | head -1 | cut -d '-' -f 2)"
     RHCOS_IMAGES_BASE_URI="https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/$rhcos_major_rel/latest/"
     SHA256=$(curl -sS "$RHCOS_IMAGES_BASE_URI"sha256sum.txt)
     declare -A images
-    images[ramdisk]=$(echo "$SHA256" | grep installer-initramfs | rev | cut -d ' ' -f 1 | rev | head -n 1)
-    images[kernel]=$(echo "$SHA256" | grep installer-kernel | rev | cut -d ' ' -f 1 | rev | head -n 1)
-    images[metal]=$(echo "$SHA256" | grep x86_64-metal | rev | cut -d ' ' -f 1 | rev | head -n 1)
+    if [[ "${rhcos_major_rel}" == "4.6" || "${rhcos_major_rel}" == "4.7" ]]; then
+        images[ramdisk]=$(echo "$SHA256" | grep live-initramfs | rev | cut -d ' ' -f 1 | rev | head -n 1)
+        images[kernel]=$(echo "$SHA256" | grep live-kernel | rev | cut -d ' ' -f 1 | rev | head -n 1)
+        images[metal]=$(echo "$SHA256" | grep live-rootfs | rev | cut -d ' ' -f 1 | rev | head -n 1)
+    else
+        images[ramdisk]=$(echo "$SHA256" | grep installer-initramfs | rev | cut -d ' ' -f 1 | rev | head -n 1)
+        images[kernel]=$(echo "$SHA256" | grep installer-kernel | rev | cut -d ' ' -f 1 | rev | head -n 1)
+        images[metal]=$(echo "$SHA256" | grep x86_64-metal | rev | cut -d ' ' -f 1 | rev | head -n 1)
+    fi
     mkdir -p ${dir_httpd} && chmod a+rx ${dir_httpd} 
     for image in ramdisk kernel metal; do
         if [ -f ${dir_httpd}/${image} ]; then
@@ -489,6 +500,7 @@ openshift-install --dir ~/ocp4-upi-install-1 wait-for bootstrap-complete
 
 echo "delete bootstrap server ..."
 virsh destroy ocp4-upi-bootstrap
+virsh undefine ocp4-upi-bootstrap
 
 echo "start worker ..."
 vmcount=0
