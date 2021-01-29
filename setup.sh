@@ -471,6 +471,8 @@ done
 
 echo "start master ..."
 vmcount=0
+lab_name=$(yq -r '.lab_name' setup.conf.yaml)
+lab_name=${lab_name:-""}
 masters=$(yq -r '.master | length' setup.conf.yaml)
 for i in $(seq 0 $((masters-1))); do
     type=$(yq -r .master[$i].type setup.conf.yaml)
@@ -482,6 +484,10 @@ for i in $(seq 0 $((masters-1))); do
         ipmi_addr=$(yq -r .master[$i].ipmi_addr setup.conf.yaml)
         ipmi_user=$(yq -r .master[$i].ipmi_user setup.conf.yaml)
         ipmi_password=$(yq -r .master[$i].ipmi_password setup.conf.yaml)
+        if [[ "${lab_name}" == "alias" ]]; then
+            echo "change alias lab boot order"
+            podman run -it --rm  quay.io/jianzzha/alias -H ${ipmi_addr} -u ${ipmi_user} -p ${ipmi_password} -i config/idrac_interfaces.yml -t upi
+        fi
         ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev pxe
         ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
     fi
@@ -515,6 +521,11 @@ for i in $(seq 0 $((workers-1))); do
         ipmi_addr=$(yq -r .worker[$i].ipmi_addr setup.conf.yaml)
         ipmi_user=$(yq -r .worker[$i].ipmi_user setup.conf.yaml)
         ipmi_password=$(yq -r .worker[$i].ipmi_password setup.conf.yaml)
+        if [[ "${lab_name}" == "alias" ]]; then
+            echo "change alias lab boot order"
+            podman run -it --rm  quay.io/jianzzha/alias -H ${ipmi_addr} -u ${ipmi_user} -p ${ipmi_password} -i config/idrac_interfaces.yml -t upi
+        fi
+
         ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev pxe
         ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
     fi

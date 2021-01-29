@@ -2,14 +2,14 @@
 update_installer: true 
 # use released(or candidate) openshift installer binary
 #build: ga | dev
-build: ga
+build: ga 
 # openshift installer version; for ga, find it here: https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
 #			      for dev, find it here: https://mirror.openshift.com/pub/openshift-v4/clients/ocp-dev-preview/ 
 version: "4.4.3"
 #version: "candidate-4.5"
 
 # whether or not update the rhcos image; the rhos version does not need to match the installer, e.g. 4.4 rhcos may work with 4.5 installer
-update_rhcos: false
+update_rhcos: true 
 # rhcos version 
 rhcos_major_rel: "4.4"
 
@@ -25,12 +25,21 @@ master:
   mac: '52:54:00:f9:8e:22'
 
 worker:
+- type: 'virtual'
+  mac: '52:54:00:f9:8e:30'
 - type: 'baremetal'
-  mac: '3c:fd:fe:c1:67:a0'
-  ipmi_addr: 'mgmt-e24-h23-740xd.alias.bos.scalelab.redhat.com'
+  mac: 'e4:43:4b:2a:b8:88'
+  ipmi_addr: 'mgmt-e25-h23-740xd.alias.bos.scalelab.redhat.com'
   ipmi_user: 'quads'
-  ipmi_password: 'bos@165'
+  ipmi_password: 'bos@340'
   disable_int: 
+    - eno3
+- type: 'baremetal'
+  mac: 'e4:43:4b:27:f3:b4'
+  ipmi_addr: 'mgmt-e25-h25-740xd.alias.bos.scalelab.redhat.com'
+  ipmi_user: 'quads'
+  ipmi_password: 'bos@340'
+  disable_int:
     - eno3
 
 # disable these on the installation host
@@ -40,7 +49,7 @@ disable_selinux: true
 reset_iptables: true
 
 # This is the baremetal interface on the installation host that's used to service the bootp
-baremetal_phy_int: p7p1 
+baremetal_phy_int: em1 
 # for Alias lab, change p7p1 to em1
 
 # networkType: OVNKubernetes | OpenShiftSDN | Calico
@@ -56,4 +65,4 @@ container_runtime: podman
 # run haproxy/httpd/dnsmasq service in the installtion host or container. The host level service is verified, there may be problem with container
 # recommend: false  
 services_in_container: false 
-
+lab_name: alias
