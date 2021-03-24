@@ -439,7 +439,24 @@ if [[ -d $SCRIPTPATH/manifests ]]; then
         /bin/cp -f $f manifests/
     done
 fi
- 
+
+# take care of local chronyd setting
+ntp_server=$(yq -r '.ntp_server' setup.conf.yaml)
+ntp_server=${ntp_server:-clock.redhat.com}
+sed -e "s/%%ntp_server%%/${ntp_server}/g" chrony.conf.tmpl > chrony.conf.tmp
+sudo /usr/bin/mv /etc/chrony.conf /etc/chrony.conf.bak
+sudo /usr/bin/cp chrony.conf.tmp /etc/chrony.conf
+sudo systemctl restart chronyd
+
+# take care of cluster chrony setting
+chrony_base64=$(cat chrony.conf.tmp | base64 -w0)
+for role in "master" "worker"; do
+    sed -e "s/%%role%%/${role}/g" -e "s/%%chrony_base64%%/${chrony_base64}/g" chrony.yaml.tmpl > manifests/50-${role}-chrony.yaml
+done    
+
+#clean up chrony related temp files
+/usr/bin/rm -rf chrony.conf.tmp
+
 echo "create ignition files"
 openshift-install create ignition-configs
 /usr/bin/cp -f *.ign ${dir_httpd} 

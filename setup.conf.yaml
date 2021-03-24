@@ -5,13 +5,13 @@ update_installer: true
 build: ga 
 # openshift installer version; for ga, find it here: https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
 #			      for dev, find it here: https://mirror.openshift.com/pub/openshift-v4/clients/ocp-dev-preview/ 
-version: "4.4.3"
-#version: "candidate-4.5"
+#version: "4.4.3"
+version: "stable-4.7"
 
 # whether or not update the rhcos image; the rhos version does not need to match the installer, e.g. 4.4 rhcos may work with 4.5 installer
 update_rhcos: true 
 # rhcos version 
-rhcos_major_rel: "4.4"
+rhcos_major_rel: "4.7"
 
 # master struction has member: type(virtual|baremetal), mac, ipmi_user, ipmi_password
 # virtual host does not need to have ipmi info 
@@ -33,14 +33,22 @@ worker:
   ipmi_user: 'quads'
   ipmi_password: 'bos@340'
   disable_int: 
+    - eno2
     - eno3
+    - eno4
+    - ens7f0
+    - ens7f1
 - type: 'baremetal'
   mac: 'e4:43:4b:27:f3:b4'
   ipmi_addr: 'mgmt-e25-h25-740xd.alias.bos.scalelab.redhat.com'
   ipmi_user: 'quads'
   ipmi_password: 'bos@340'
   disable_int:
+    - eno2
     - eno3
+    - eno4
+    - ens7f0
+    - ens7f1
 
 # disable these on the installation host
 # recommend: true
@@ -66,3 +74,5 @@ container_runtime: podman
 # recommend: false  
 services_in_container: false 
 lab_name: alias
+
+ntp_server: clock.redhat.com
