@@ -428,6 +428,18 @@ echo "recreate install directory"
 mkdir ~/ocp4-upi-install-1
 cp install-config.yaml ~/ocp4-upi-install-1
 
+# chrony prepare work need to be done in current directoty
+ntp_server=$(yq -r '.ntp_server' setup.conf.yaml)
+ntp_server=${ntp_server:-clock.redhat.com}
+sed -e "s/%%ntp_server%%/${ntp_server}/g" chrony.conf.tmpl > chrony.conf.tmp
+sudo /usr/bin/cp -f /etc/chrony.conf /etc/chrony.conf.bak
+sudo /usr/bin/cp -f chrony.conf.tmp /etc/chrony.conf
+sudo systemctl restart chronyd
+chrony_base64=$(cat chrony.conf.tmp | base64 -w0)
+/usr/bin/cp -f chrony.yaml.tmpl ~/ocp4-upi-install-1/
+#clean up chrony related temp files
+/usr/bin/rm -rf chrony.conf.tmp
+
 pushd ~/ocp4-upi-install-1
 openshift-install create manifests
 # disable pod schedule on master nodes
@@ -441,21 +453,9 @@ if [[ -d $SCRIPTPATH/manifests ]]; then
 fi
 
 # take care of local chronyd setting
-ntp_server=$(yq -r '.ntp_server' setup.conf.yaml)
-ntp_server=${ntp_server:-clock.redhat.com}
-sed -e "s/%%ntp_server%%/${ntp_server}/g" chrony.conf.tmpl > chrony.conf.tmp
-sudo /usr/bin/mv /etc/chrony.conf /etc/chrony.conf.bak
-sudo /usr/bin/cp chrony.conf.tmp /etc/chrony.conf
-sudo systemctl restart chronyd
-
-# take care of cluster chrony setting
-chrony_base64=$(cat chrony.conf.tmp | base64 -w0)
 for role in "master" "worker"; do
     sed -e "s/%%role%%/${role}/g" -e "s/%%chrony_base64%%/${chrony_base64}/g" chrony.yaml.tmpl > manifests/50-${role}-chrony.yaml
 done    
-
-#clean up chrony related temp files
-/usr/bin/rm -rf chrony.conf.tmp
 
 echo "create ignition files"
 openshift-install create ignition-configs
