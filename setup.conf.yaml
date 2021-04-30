@@ -28,27 +28,12 @@ worker:
 - type: 'virtual'
   mac: '52:54:00:f9:8e:30'
 - type: 'baremetal'
-  mac: 'e4:43:4b:2a:b8:88'
-  ipmi_addr: 'mgmt-e25-h23-740xd.alias.bos.scalelab.redhat.com'
-  ipmi_user: 'quads'
-  ipmi_password: 'bos@340'
+  mac: '40:a6:b7:2b:2b:31'
+  ipmi_addr: 'r740-l3c14u03-drac.ptp.lab.eng.bos.redhat.com'
+  ipmi_user: 'root'
+  ipmi_password: 'calvin'
   disable_int: 
-    - eno2
-    - eno3
-    - eno4
-    - ens7f0
-    - ens7f1
-- type: 'baremetal'
-  mac: 'e4:43:4b:27:f3:b4'
-  ipmi_addr: 'mgmt-e25-h25-740xd.alias.bos.scalelab.redhat.com'
-  ipmi_user: 'quads'
-  ipmi_password: 'bos@340'
-  disable_int:
-    - eno2
-    - eno3
-    - eno4
-    - ens7f0
-    - ens7f1
+    - ens3f0
 
 # disable these on the installation host
 # recommend: true
@@ -57,8 +42,9 @@ disable_selinux: true
 reset_iptables: true
 
 # This is the baremetal interface on the installation host that's used to service the bootp
-baremetal_phy_int: em1 
+baremetal_phy_int: ens3f1
 # for Alias lab, change p7p1 to em1
+baremetal_vlan: 300
 
 # networkType: OVNKubernetes | OpenShiftSDN | Calico
 networkType: OVNKubernetes 

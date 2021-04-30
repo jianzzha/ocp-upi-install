@@ -262,12 +262,21 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     sudo nmcli con up baremetal
 
     BM_IF=$(yq -r .baremetal_phy_int setup.conf.yaml)
+    BM_VLAN=$(yq -r .baremetal_vlan setup.conf.yaml)
     if [ -n "${BM_IF}" ]; then
-        sudo nmcli con down $BM_IF || true
-        sudo nmcli con del $BM_IF || true
-        sudo nmcli con add type bridge-slave autoconnect yes con-name $BM_IF ifname $BM_IF master baremetal
-        sudo nmcli con reload $BM_IF
-        sudo nmcli con up $BM_IF
+        if [ -n "${BM_VLAN}" ]; then
+		sudo nmcli con down $BM_IF.$BM_VLAN || true
+		sudo nmcli con del $BM_IF.$BM_VLAN || true
+		nmcli con add type vlan autoconnect yes con-name $BM_IF.$BM_VLAN ifname $BM_IF.$BM_VLAN dev $BM_IF id $BM_VLAN master baremetal slave-type bridge
+		sudo nmcli con reload $BM_IF.$BM_VLAN
+		sudo nmcli con up $BM_IF.$BM_VLAN
+        else 
+        	sudo nmcli con down $BM_IF || true
+        	sudo nmcli con del $BM_IF || true
+        	sudo nmcli con add type bridge-slave autoconnect yes con-name $BM_IF ifname $BM_IF master baremetal
+        	sudo nmcli con reload $BM_IF
+        	sudo nmcli con up $BM_IF
+	fi
     fi
    
     disable_firewalld=$(yq -r .disable_firewalld setup.conf.yaml)
