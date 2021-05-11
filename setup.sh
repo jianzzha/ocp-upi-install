@@ -327,6 +327,8 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         echo "MASQUERADE set on bastion"
     fi
     sudo echo 1 > /proc/sys/net/ipv4/ip_forward
+    sudo sed -i '/net.ipv4.ip_forward.*/d' /etc/sysctl.conf
+    sudo echo net.ipv4.ip_forward=1 >> /etc/sysctl.conf
     
     echo "set up /etc/resolv.conf"
     sed -i 's/^search.*/search test.myocp4.com/' /etc/resolv.conf
