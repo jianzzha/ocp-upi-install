@@ -263,8 +263,8 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
 
     BM_IF=$(yq -r .baremetal_phy_int setup.conf.yaml)
     BM_VLAN=$(yq -r .baremetal_vlan setup.conf.yaml)
-    if [ -n "${BM_IF}" ]; then
-        if [ -n "${BM_VLAN}" ]; then
+    if [[ -n "${BM_IF}" && "${BM_IF}" != "null" ]]; then
+        if [[ -n "${BM_VLAN}" && "${BM_VLAN}" != "null" ]]; then
 		sudo nmcli con down $BM_IF.$BM_VLAN || true
 		sudo nmcli con del $BM_IF.$BM_VLAN || true
 		nmcli con add type vlan autoconnect yes con-name $BM_IF.$BM_VLAN ifname $BM_IF.$BM_VLAN dev $BM_IF id $BM_VLAN master baremetal slave-type bridge
