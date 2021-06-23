@@ -322,7 +322,26 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
 
     if ! iptables -t nat -L POSTROUTING | egrep "MASQUERADE.*anywhere.*anywhere"; then
         oif=$(ip route | sed -n -r '0,/default/s/.* dev (\w+).*/\1/p')
-        sudo iptables -t nat -A POSTROUTING -s 192.168.222.0/24 ! -d 192.168.222.0/24 -o $oif -j MASQUERADE
+	mkdir -p /usr/local/bin/
+	cat > /usr/local/bin/ocp-iptables.sh <<EOF
+#!/usr/bin/bash
+iptables -t nat -A POSTROUTING -s 192.168.222.0/24 ! -d 192.168.222.0/24 -o $oif -j MASQUERADE
+EOF
+	chmod u+x /usr/local/bin/ocp-iptables.sh
+	mkdir -p /usr/local/lib/systemd/system/
+	cat > /usr/local/lib/systemd/system/ocp-iptables.service <<EOF
+[Unit]
+Description=Setup openshift iptables
+[Service]
+ExecStart=/usr/local/bin/ocp-iptables.sh
+Type=oneshot
+RemainAfterExit=true
+[Install]
+WantedBy=multi-user.target
+EOF
+        #sudo iptables -t nat -A POSTROUTING -s 192.168.222.0/24 ! -d 192.168.222.0/24 -o $oif -j MASQUERADE
+        # use systemd instead of running the iptable cli to make it survive the reboot
+        systemctl enable --now ocp-iptables
         sed -i "/^except-interface=lo/a except-interface=${oif}" dnsmasq/dnsmasq.conf 
         echo "MASQUERADE set on bastion"
     fi
