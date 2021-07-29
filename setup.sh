@@ -339,9 +339,9 @@ RemainAfterExit=true
 [Install]
 WantedBy=multi-user.target
 EOF
-        #sudo iptables -t nat -A POSTROUTING -s 192.168.222.0/24 ! -d 192.168.222.0/24 -o $oif -j MASQUERADE
-        # use systemd instead of running the iptable cli to make it survive the reboot
-        systemctl enable --now ocp-iptables
+        sudo iptables -t nat -A POSTROUTING -s 192.168.222.0/24 ! -d 192.168.222.0/24 -o $oif -j MASQUERADE
+        # add systemd service to run the iptable to make it survive the reboot
+        systemctl enable ocp-iptables
         sed -i "/^except-interface=lo/a except-interface=${oif}" dnsmasq/dnsmasq.conf 
         echo "MASQUERADE set on bastion"
     fi
