@@ -1,7 +1,0 @@
-DEFAULT pxeboot
-TIMEOUT 20
-PROMPT 0
-LABEL pxeboot
-    KERNEL http://192.168.222.1:81/kernel
-    APPEND initrd=http://192.168.222.1:81/ramdisk console=tty0 console=ttyS0 console=tty0 coreos.inst.install_dev=/dev/sda coreos.live.rootfs_url=http://192.168.222.1:81/metal coreos.inst.ignition_url=http://192.168.222.1:81/worker.ign
-    SYSAPPEND 2

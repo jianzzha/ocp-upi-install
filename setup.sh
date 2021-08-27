@@ -198,9 +198,6 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     PXEDIR="${dir_tftpboot}/pxelinux.cfg"
     mkdir -p ${PXEDIR}
     /bin/cp -f pxelinux-cfg.tmpl ${PXEDIR}/worker
-    if [[ "${rhcos_major_rel}" == "4.6" || "${rhcos_major_rel}" == "4.7" ]]; then
-        /bin/cp -f pxelinux-cfg-4.6.tmpl ${PXEDIR}/worker
-    fi
     /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/default
     /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/bootstrap
     # bootstrap is a VM with hardcode mac address
@@ -426,15 +423,9 @@ if [[ "${update_rhcos}" == "true" ]]; then
     RHCOS_IMAGES_BASE_URI="https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/$rhcos_major_rel/latest/"
     SHA256=$(curl -sS "$RHCOS_IMAGES_BASE_URI"sha256sum.txt)
     declare -A images
-    if [[ "${rhcos_major_rel}" == "4.6" || "${rhcos_major_rel}" == "4.7" ]]; then
-        images[ramdisk]=$(echo "$SHA256" | grep live-initramfs | rev | cut -d ' ' -f 1 | rev | head -n 1)
-        images[kernel]=$(echo "$SHA256" | grep live-kernel | rev | cut -d ' ' -f 1 | rev | head -n 1)
-        images[metal]=$(echo "$SHA256" | grep live-rootfs | rev | cut -d ' ' -f 1 | rev | head -n 1)
-    else
-        images[ramdisk]=$(echo "$SHA256" | grep installer-initramfs | rev | cut -d ' ' -f 1 | rev | head -n 1)
-        images[kernel]=$(echo "$SHA256" | grep installer-kernel | rev | cut -d ' ' -f 1 | rev | head -n 1)
-        images[metal]=$(echo "$SHA256" | grep x86_64-metal | rev | cut -d ' ' -f 1 | rev | head -n 1)
-    fi
+    images[ramdisk]=$(echo "$SHA256" | grep live-initramfs | rev | cut -d ' ' -f 1 | rev | head -n 1)
+    images[kernel]=$(echo "$SHA256" | grep live-kernel | rev | cut -d ' ' -f 1 | rev | head -n 1)
+    images[metal]=$(echo "$SHA256" | grep live-rootfs | rev | cut -d ' ' -f 1 | rev | head -n 1)
     mkdir -p ${dir_httpd} && chmod a+rx ${dir_httpd} 
     for image in ramdisk kernel metal; do
         if [ -f ${dir_httpd}/${image} ]; then
@@ -606,18 +597,17 @@ while [[ ${vmcount} -gt 0 ]]; do
 done
 
 tmux kill-session -t csr 2>/dev/null || true
-cmd="count=$((workers*2)); \
-     while ((count > 0)); do \
+cmd="while true; do \
          echo 'waiting for Pending csr'; \
          if oc get csr | grep Pending; then \
              csr=\$(oc get csr | awk '/Pending/ {print\$1; exit;}'); \
              oc adm certificate approve \$csr; \
-             ((count--)); \
          fi; \
          sleep 5; \
-     done; \
-     > /root/.ssh/known_hosts"
+     done"
 tmux new-session -s csr -d "${cmd}"
+
+> /root/.ssh/known_hosts
 
 echo "The baremetal machine should reboot twice; If the baremetal machine keep doing PXE boot then the BIOS boot order is incorrect. The hard drive should be the first boot device."
 echo "watch oc get clusterversion to get progress status"
