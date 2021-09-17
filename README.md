@@ -9,11 +9,21 @@ To run the install, on the installtion host, as a root user, git clone this repo
 
 The install options are set in setup.conf.yaml, please follow the comment line in the setup.conf.yaml to make adjust.
 
+The following settings in setup.conf.yaml are most common,
+* "version", OCP version
+* "rhcos_major_rel", rhcos version
+* "disable_int", for baremetal workers that may have multiple DHCP interfaces, list the interfaces that should be disabled
+* "baremetal_phy_int", this is the control node (or bastion) interface that is used to connect the baremetal workers
+* "baremetal_vlan", if vlan is used on "baremetal_phy_int" to connect the baremetal workers, put down the vlan id; otherwise remove
+* "ntp_server", ntp server in your network
+
 ### topology
 
 <img src="https://docs.google.com/drawings/d/e/2PACX-1vSCLG6HLcMAYDSXD76n6C0NaVaFA0gdXjna-BZ_lJyDkDRZ9XV_Z3HfkRQVFaHvbH7W35H82EoznpZr/pub?w=960&amp;h=720">
 
 ### prerequisites
+
+Before running the setup.sh script, use `yum update -y` to update RHEL.
 
 **BIOS boot order on the baremetal hosts: 1. hard disk 2. PXE on the baremetal NIC.** 
 
