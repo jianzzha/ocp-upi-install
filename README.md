@@ -9,6 +9,9 @@ To run the install, on the installtion host, as a root user, git clone this repo
 
 The install options are set in setup.conf.yaml, please follow the comment line in the setup.conf.yaml to make adjust.
 
+### topology
+![drawing](https://docs.google.com/drawings/d/12AvXbRq_1yfjsi-qzFRL76RoGU7bPrN4HwSV1aj6dvA/edit?usp=sharing)
+
 ### prerequisites
 
 **BIOS boot order on the baremetal hosts: 1. hard disk 2. PXE on the baremetal NIC.** 
