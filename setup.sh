@@ -508,7 +508,7 @@ chmod a+rx ${dir_httpd}/*
 ./delete-vm.sh
 
 echo "start bootstrap VM ..."
-virt-install -n ocp4-upi-bootstrap --pxe --os-type=Linux --os-variant=rhel8.0 --ram=8192 --vcpus=4 --network network=ocp4-upi,mac=52:54:00:f9:8e:41 --disk size=60,bus=scsi,sparse=yes --check disk_size=off --noautoconsole
+virt-install -n ocp4-upi-bootstrap --pxe --os-type=Linux --os-variant=rhel8.0 --ram=8192 --vcpus=4 --network network=ocp4-upi,mac=52:54:00:f9:8e:41 --disk size=60,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough
 while true; do
     sleep 3
     if virsh list --state-shutoff | grep ocp4-upi-bootstrap; then
@@ -535,7 +535,7 @@ for i in $(seq 0 $((masters-1))); do
     if [[ ${type} == "virtual" ]]; then
         vmcount=$((vmcount+1))
         mac=$(yq -r .master[$i].mac setup.conf.yaml)
-        virt-install -n ocp4-upi-master${i} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network network=ocp4-upi,mac=${mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole;
+        virt-install -n ocp4-upi-master${i} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network network=ocp4-upi,mac=${mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough;
     else
         ipmi_addr=$(yq -r .master[$i].ipmi_addr setup.conf.yaml)
         ipmi_user=$(yq -r .master[$i].ipmi_user setup.conf.yaml)
@@ -572,7 +572,7 @@ for i in $(seq 0 $((workers-1))); do
     if [[ ${type} == "virtual" ]]; then
         vmcount=$((vmcount+1))
         mac=$(yq -r .worker[$i].mac setup.conf.yaml)
-        virt-install -n ocp4-upi-worker${i} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network network=ocp4-upi,mac=${mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole
+        virt-install -n ocp4-upi-worker${i} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network network=ocp4-upi,mac=${mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough
     else
         ipmi_addr=$(yq -r .worker[$i].ipmi_addr setup.conf.yaml)
         ipmi_user=$(yq -r .worker[$i].ipmi_user setup.conf.yaml)
