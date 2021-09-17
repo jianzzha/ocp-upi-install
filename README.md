@@ -10,7 +10,8 @@ To run the install, on the installtion host, as a root user, git clone this repo
 The install options are set in setup.conf.yaml, please follow the comment line in the setup.conf.yaml to make adjust.
 
 ### topology
-![drawing](https://docs.google.com/drawings/d/12AvXbRq_1yfjsi-qzFRL76RoGU7bPrN4HwSV1aj6dvA/edit?usp=sharing)
+
+<img src="https://docs.google.com/drawings/d/e/2PACX-1vSCLG6HLcMAYDSXD76n6C0NaVaFA0gdXjna-BZ_lJyDkDRZ9XV_Z3HfkRQVFaHvbH7W35H82EoznpZr/pub?w=960&amp;h=720">
 
 ### prerequisites
 
