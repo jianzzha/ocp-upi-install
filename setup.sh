@@ -185,6 +185,12 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     fi
 
     /bin/cp -f install-config.yaml.tmpl install-config.yaml
+
+    http_proxy=$(yq -r '.http_proxy' setup.conf.yaml)
+    no_proxy=$(yq -r '.no_proxy' setup.conf.yaml)
+    if [[ -n "${http_proxy/null/}" ]]; then
+        sed -i "/^baseDomain:.*/a proxy:\n  httpProxy: \"${http_proxy}\"\n  httpsProxy: \"${http_proxy}\"\n  noProxy: \"${no_proxy}\"" install-config.yaml
+    fi
     networkType=$(yq -r '.networkType' setup.conf.yaml)
     networkType=${networkType:-OVNKubernetes}
     sed -i s/%%networkType%%/${networkType}/ install-config.yaml
@@ -193,6 +199,11 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     echo "setup dnsmasq config file"
     mkdir -p dnsmasq
     /bin/cp -f dnsmasq.conf.tmpl dnsmasq/dnsmasq.conf
+
+    dns_forwarder=$(yq -r '.dns_forwarder' setup.conf.yaml)
+    if [[ -n "${dns_forwarder}" && "null" != "${dns_forwarder}" ]]; then
+        sed -i "/^interface=.*/a server=${dns_forwarder}" dnsmasq/dnsmasq.conf
+    fi
 
     echo "set up pxe files"
     PXEDIR="${dir_tftpboot}/pxelinux.cfg"

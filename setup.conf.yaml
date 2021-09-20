@@ -6,12 +6,12 @@ build: ga
 # openshift installer version; for ga, find it here: https://mirror.openshift.com/pub/openshift-v4/clients/ocp/
 #			      for dev, find it here: https://mirror.openshift.com/pub/openshift-v4/clients/ocp-dev-preview/ 
 #version: "4.4.3"
-version: "stable-4.7"
+version: "4.8.2"
 
 # whether or not update the rhcos image; the rhos version does not need to match the installer, e.g. 4.4 rhcos may work with 4.5 installer
 update_rhcos: true 
 # rhcos version 
-rhcos_major_rel: "4.7"
+rhcos_major_rel: "4.8"
 
 # master struction has member: type(virtual|baremetal), mac, ipmi_user, ipmi_password
 # virtual host does not need to have ipmi info 
@@ -28,12 +28,18 @@ worker:
 - type: 'virtual'
   mac: '52:54:00:f9:8e:30'
 - type: 'baremetal'
-  mac: '40:a6:b7:2b:2b:31'
-  ipmi_addr: 'r740-l3c14u03-drac.ptp.lab.eng.bos.redhat.com'
+  mac: '40:a6:b7:2b:2b:11'
+  ipmi_addr: 'r740-l3c14u09-drac.ptp.lab.eng.bos.redhat.com'
   ipmi_user: 'root'
   ipmi_password: 'calvin'
-  disable_int: 
-    - ens3f0
+  disable_int: {}
+#- type: 'baremetal'
+#  mac: '40:a6:b7:2b:18:b1'
+#  ipmi_addr: 'r740xd-l3c14u13-drac.ptp.lab.eng.bos.redhat.com'
+#  ipmi_user: 'root'
+#  ipmi_password: 'calvin'
+#  disable_int: {}
+
 
 # disable these on the installation host
 # recommend: true
@@ -42,7 +48,7 @@ disable_selinux: true
 reset_iptables: true
 
 # This is the baremetal interface on the installation host that's used to service the bootp
-baremetal_phy_int: ens3f1
+baremetal_phy_int: ens1f1
 # for Alias lab, change p7p1 to em1
 baremetal_vlan: 300
 
@@ -59,6 +65,10 @@ container_runtime: podman
 # run haproxy/httpd/dnsmasq service in the installtion host or container. The host level service is verified, there may be problem with container
 # recommend: false  
 services_in_container: false 
-lab_name: alias
 
 ntp_server: clock.redhat.com
+dns_forwarder: 10.5.30.160
+
+http_proxy: "http://10.19.110.23:3128"
+no_proxy: "10.16.231.128"
+
