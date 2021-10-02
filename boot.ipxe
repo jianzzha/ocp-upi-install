@@ -1,0 +1,5 @@
+#!ipxe
+
+kernel http://192.168.222.1:81/kernel initrd=ramdisk console=tty0 console=ttyS0 coreos.inst.install_dev=/dev/sda coreos.live.rootfs_url=http://192.168.222.1:81/metal coreos.inst.ignition_url=http://192.168.222.1:81/ign/${net0/mac}
+initrd http://192.168.222.1:81/ramdisk
+boot

@@ -24,6 +24,9 @@ function build_badfish_image {
 
 
 function add_pxe_files {
+    if [ -e /var/lib/tftpboot/lpxelinux.0 ]; then
+        return
+    fi
     mkdir -p tmp_syslinux
     sudo mkdir -p /var/lib/tftpboot
     curl -s -o tmp_syslinux/syslinux.zip https://mirrors.edge.kernel.org/pub/linux/utils/boot/syslinux/syslinux-6.03.zip
@@ -32,6 +35,23 @@ function add_pxe_files {
     sudo /bin/cp -f tmp_syslinux/bios/com32/elflink/ldlinux/ldlinux.c32 /var/lib/tftpboot 
     /bin/rm -rf tmp_syslinux 
 }
+
+function add_ipxe_files {
+    if [ -e /var/lib/tftpboot/undionly.kpxe ]; then
+        return 
+    fi
+    yum groupinstall -y "Development Tools"
+    yum install -y xz-devel
+    mkdir -p /var/lib/tftpboot
+    git clone https://github.com/ipxe/ipxe.git
+    pushd ipxe/src
+    make
+    /bin/cp -f bin/undionly.kpxe /var/lib/tftpboot/
+    make bin-x86_64-efi/ipxe.efi
+    /bin/cp -f bin-x86_64-efi/ipxe.efi /var/lib/tftpboot/
+    popd
+}
+    
 
 function install_docker {
     echo "install docker"
@@ -184,6 +204,14 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         yum install -y httpd haproxy dnsmasq
     fi
 
+    mkdir -p ${dir_httpd}
+    /bin/cp -f boot.ipxe ${dir_httpd}/
+    mkdir -p ${dir_httpd}/ign
+    chmod 0755 ${dir_httpd}/ign
+    #create dummy .ign files
+    touch ${dir_httpd}/ign/{bootstrap.ign,master.ign,worker.ign}
+    ln -sf ${dir_httpd}/ign/bootstrap.ign ${dir_httpd}/ign/52:54:00:f9:8e:41
+
     /bin/cp -f install-config.yaml.tmpl install-config.yaml
 
     http_proxy=$(yq -r '.http_proxy' setup.conf.yaml)
@@ -205,17 +233,6 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         sed -i "/^interface=.*/a server=${dns_forwarder}" dnsmasq/dnsmasq.conf
     fi
 
-    echo "set up pxe files"
-    PXEDIR="${dir_tftpboot}/pxelinux.cfg"
-    mkdir -p ${PXEDIR}
-    /bin/cp -f pxelinux-cfg.tmpl ${PXEDIR}/worker
-    /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/default
-    /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/bootstrap
-    # bootstrap is a VM with hardcode mac address
-    sed -i s/worker.ign/bootstrap.ign/ ${PXEDIR}/bootstrap
-    /bin/cp -f ${PXEDIR}/bootstrap ${PXEDIR}/01-52-54-00-f9-8e-41
-    /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/master
-    sed -i s/worker.ign/master.ign/ ${PXEDIR}/master
     masters=$(yq -r '.master | length' setup.conf.yaml)
     sed -i s/%%master-replicas%%/${masters}/ install-config.yaml
     lastentry=bootstrap
@@ -223,15 +240,12 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
 	mac=$(yq -r .master[$i].mac setup.conf.yaml | tr '[:upper:]' '[:lower:]')
         sed -i "/dhcp-host=.*,${lastentry}/a dhcp-host=${mac},192.168.222.2${i},master$i" dnsmasq/dnsmasq.conf 
         lastentry=master$i
-        m=$(echo $mac | sed s/\:/-/g | tr '[:upper:]' '[:lower:]')
         disable_ifs=$(yq -r ".master[$i].disable_int | length" setup.conf.yaml)
         if ((disable_ifs == 0)); then
-            /bin/cp -f ${PXEDIR}/master ${PXEDIR}/01-${m}
+            ln -sf ${dir_httpd}/ign/master.ign ${dir_httpd}/ign/${mac}
         else
-            /bin/cp -f ${PXEDIR}/master ${PXEDIR}/master${i}
-            ### setup individual ign file
-            sed -i s/master.ign/master${i}.ign/ ${PXEDIR}/master${i}
-            /bin/cp -f ${PXEDIR}/master${i} ${PXEDIR}/01-${m}
+            /bin/cp -f ${dir_httpd}/ign/master.ign ${dir_httpd}/ign/master$i.ign 
+            ln -sf ${dir_httpd}/ign/master$i.ign ${dir_httpd}/ign/${mac}
             mkdir -p fix-ign-master${i}/etc/sysconfig/network-scripts/
             for j in $(seq 0 $((disable_ifs-1))); do
                 ifname=$(yq -r .master[$i].disable_int[$j] setup.conf.yaml)
@@ -245,15 +259,12 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         mac=$(yq -r .worker[$i].mac setup.conf.yaml | tr '[:upper:]' '[:lower:]')
         sed -i "/dhcp-host=.*,${lastentry}/a dhcp-host=${mac},192.168.222.$((30+i)),worker$i" dnsmasq/dnsmasq.conf
         lastentry=worker$i
-        m=$(echo $mac | sed s/\:/-/g | tr '[:upper:]' '[:lower:]')
         disable_ifs=$(yq -r ".worker[$i].disable_int | length" setup.conf.yaml)
         if ((disable_ifs == 0)); then
-            /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/01-${m}
+            ln -sf ${dir_httpd}/ign/worker.ign ${dir_httpd}/ign/${mac} 
         else
-            /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/worker${i} 
-            ### setup individual ign file
-            sed -i s/worker.ign/worker${i}.ign/ ${PXEDIR}/worker${i} 
-            /bin/cp -f ${PXEDIR}/worker${i} ${PXEDIR}/01-${m}
+            /bin/cp -f ${dir_httpd}/ign/worker.ign ${dir_httpd}/ign/worker$i.ign
+            ln -sf ${dir_httpd}/ign/worker$i.ign ${dir_httpd}/ign/${mac}
             mkdir -p fix-ign-worker${i}/etc/sysconfig/network-scripts/
             for j in $(seq 0 $((disable_ifs-1))); do
                 ifname=$(yq -r .worker[$i].disable_int[$j] setup.conf.yaml)
@@ -364,11 +375,11 @@ EOF
         echo "bastion /etc/resolv.conf updated"
     fi
 
-    mkdir -p ${dir_httpd}
     if [[ ${services_in_container} == "false" ]]; then
          sudo cp haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg
          sudo cp dnsmasq/dnsmasq.conf /etc/dnsmasq.conf
          add_pxe_files
+         add_ipxe_files
          sed -i s/Listen\ 80/Listen\ 81/ /etc/httpd/conf/httpd.conf
          sudo systemctl enable haproxy httpd dnsmasq
          sudo systemctl restart haproxy httpd dnsmasq 
@@ -491,7 +502,7 @@ done
 
 echo "create ignition files"
 openshift-install create ignition-configs
-/usr/bin/cp -f *.ign ${dir_httpd} 
+/usr/bin/cp -f *.ign ${dir_httpd}/ign 
 popd
 
 echo "copy kubeconfig file"
@@ -504,22 +515,23 @@ for d in $(ls -d fix-ign-master*); do
     node=$(echo $d | sed -r 's/fix-ign-(master.*)/\1/')
     /usr/bin/cp -f ~/ocp4-upi-install-1/master.ign ./ 
     filetranspile -i master.ign -f $d -o ${node}.ign
-    /usr/bin/cp -f ${node}.ign ${dir_httpd} 
+    /usr/bin/cp -f ${node}.ign ${dir_httpd}/ign
 done
 
 for d in $(ls -d fix-ign-worker*); do
     node=$(echo $d | sed -r 's/fix-ign-(worker.*)/\1/')
     /usr/bin/cp -f ~/ocp4-upi-install-1/worker.ign ./
     filetranspile -i worker.ign -f $d -o ${node}.ign
-    /usr/bin/cp -f ${node}.ign ${dir_httpd}    
+    /usr/bin/cp -f ${node}.ign ${dir_httpd}/ign  
 done
 
-chmod a+rx ${dir_httpd}/*
+chmod a+r ${dir_httpd}/*
+chmod a+r ${dir_httpd}/ign/*
 
 ./delete-vm.sh
 
 echo "start bootstrap VM ..."
-virt-install -n ocp4-upi-bootstrap --pxe --os-type=Linux --os-variant=rhel8.0 --ram=8192 --vcpus=4 --network network=ocp4-upi,mac=52:54:00:f9:8e:41 --disk size=60,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough
+virt-install -n ocp4-upi-bootstrap --pxe --os-type=Linux --os-variant=rhel8.0 --ram=8192 --vcpus=4 --network network=ocp4-upi,mac=52:54:00:f9:8e:41 --disk size=60,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough --graphics none --console pty,target_type=serial
 while true; do
     sleep 3
     if virsh list --state-shutoff | grep ocp4-upi-bootstrap; then
@@ -546,7 +558,7 @@ for i in $(seq 0 $((masters-1))); do
     if [[ ${type} == "virtual" ]]; then
         vmcount=$((vmcount+1))
         mac=$(yq -r .master[$i].mac setup.conf.yaml)
-        virt-install -n ocp4-upi-master${i} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network network=ocp4-upi,mac=${mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough;
+        virt-install -n ocp4-upi-master${i} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network network=ocp4-upi,mac=${mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough --graphics none --console pty,target_type=serial
     else
         ipmi_addr=$(yq -r .master[$i].ipmi_addr setup.conf.yaml)
         ipmi_user=$(yq -r .master[$i].ipmi_user setup.conf.yaml)
@@ -583,7 +595,7 @@ for i in $(seq 0 $((workers-1))); do
     if [[ ${type} == "virtual" ]]; then
         vmcount=$((vmcount+1))
         mac=$(yq -r .worker[$i].mac setup.conf.yaml)
-        virt-install -n ocp4-upi-worker${i} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network network=ocp4-upi,mac=${mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough
+        virt-install -n ocp4-upi-worker${i} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network network=ocp4-upi,mac=${mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough --graphics none --console pty,target_type=serial
     else
         ipmi_addr=$(yq -r .worker[$i].ipmi_addr setup.conf.yaml)
         ipmi_user=$(yq -r .worker[$i].ipmi_user setup.conf.yaml)
