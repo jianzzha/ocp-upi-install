@@ -378,7 +378,6 @@ EOF
     if [[ ${services_in_container} == "false" ]]; then
          sudo cp haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg
          sudo cp dnsmasq/dnsmasq.conf /etc/dnsmasq.conf
-         add_pxe_files
          add_ipxe_files
          sed -i s/Listen\ 80/Listen\ 81/ /etc/httpd/conf/httpd.conf
          sudo systemctl enable haproxy httpd dnsmasq

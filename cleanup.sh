@@ -1,7 +1,7 @@
 #/usr/bin/bash
 set -euo pipefail
 
-./delete-vm.sh
+./delete-vm.sh || true
 
 container_runtime=$(yq -r '.container_runtime' setup.conf.yaml)
 
@@ -17,18 +17,16 @@ for s in haproxy dnsmasq httpd; do
     sudo systemctl disable --now $s || true
 done
 
-echo "clean up tftpboot directory on bastion"
-sudo /bin/rm -rf /var/lib/tftpboot/pxelinux.cfg
-
 echo "clean up www directory on bastion"
-sudo /bin/rm -rf /var/www/html/*ign
+sudo /bin/rm -rf /var/www/html/ign || true
+sudo /bin/rm -rf /var/www/html/boot.ipxe || true
 
 echo "clean up working directory, except images"
-/bin/rm -rf pxelinux.cfg
-/bin/rm -rf dnsmasq
-/bin/rm -rf *.ign
-/bin/rm -rf www/*.ign
-/bin/rm -rf fix-ign-*
-/bin/rm -rf install-config.yaml
+/bin/rm -rf pxelinux.cfg || true
+/bin/rm -rf dnsmasq || true
+/bin/rm -rf *.ign || true
+/bin/rm -rf www/*.ign || true
+/bin/rm -rf fix-ign-* || true
+/bin/rm -rf install-config.yaml || true
  
 
