@@ -9,6 +9,17 @@ if [ ! -f setup.conf.yaml ]; then
     exit 1
 fi
 
+function get_cfg_value () {
+    local name=$1
+    local default=$2
+    local value=$(yq -r "${name}" ${SCRIPTPATH}/setup.conf.yaml)
+    if [[ "${value:-null}" == "null" ]]; then
+        echo "${default}"
+    else
+        echo "${value}"
+    fi
+}
+
 function detect_os {
     source /etc/os-release
 }
@@ -29,8 +40,8 @@ function add_pxe_files {
     curl -s -o tmp_syslinux/syslinux.zip https://mirrors.edge.kernel.org/pub/linux/utils/boot/syslinux/syslinux-6.03.zip
     pushd tmp_syslinux && unzip syslinux.zip && popd
     sudo /bin/cp -f tmp_syslinux/bios/core/lpxelinux.0 /var/lib/tftpboot
-    sudo /bin/cp -f tmp_syslinux/bios/com32/elflink/ldlinux/ldlinux.c32 /var/lib/tftpboot 
-    /bin/rm -rf tmp_syslinux 
+    sudo /bin/cp -f tmp_syslinux/bios/com32/elflink/ldlinux/ldlinux.c32 /var/lib/tftpboot
+    /bin/rm -rf tmp_syslinux
 }
 
 function install_docker {
@@ -47,12 +58,12 @@ function install_runtime {
     if [[ "${ID}" == "rhel" ]]; then
         if [[ "${VERSION_ID}" =~ ^7 ]]; then
             if [[ "${container_runtime}" == "podman" ]]; then
-                local my_subscription_status=$(sudo subscription-manager status | sed -n -r 's/Overall Status: (\w+)/\1/p') 
+                local my_subscription_status=$(sudo subscription-manager status | sed -n -r 's/Overall Status: (\w+)/\1/p')
                 if [[ "${my_subscription_status}" != "Current" ]]; then
                     echo "please register this system before proceed!"
                     exit 1
                 fi
-                sudo subscription-manager repos --enable rhel-7-server-extras-rpms                 
+                sudo subscription-manager repos --enable rhel-7-server-extras-rpms
                 sudo yum install -y podman
             elif [[ "${container_runtime}" == "docker" ]]; then
                 install_docker
@@ -62,8 +73,8 @@ function install_runtime {
             fi
         elif [[ "${VERSION_ID}" =~ ^8 ]]; then
             if [[ "${container_runtime}" == "podman" ]]; then
-                sudo yum install -y podman 
-            else 
+                sudo yum install -y podman
+            else
                 echo "For rhel8, only podman is supported!"
                  exit 1
             fi
@@ -122,7 +133,7 @@ fi
 
 if ! command -v yq >/dev/null 2>&1; then
     echo "install python3 and tools"
-    yum -y install jq python3 python3-pip 
+    yum -y install jq python3 python3-pip
     if ! command -v jq >/dev/null 2>&1; then
 	#yum failed to install jq, due to repo issue
 	sudo wget -O /usr/local/bin/jq https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64
@@ -172,9 +183,9 @@ if [ ! -f install-config.yaml ]; then
 fi
 
 rhcos_major_rel=$(yq -r '.rhcos_major_rel' setup.conf.yaml)
- 
+
 if [[ "${skip_first_time_only_setup}" == "false" ]]; then
-    echo "entering first time setup" 
+    echo "entering first time setup"
     [ -f ~/clean-interfaces.sh ] && ~/clean-interfaces.sh --nuke
     yum -y groupinstall 'Virtualization Host'
     yum -y install ipmitool wget virt-install vim-enhanced git tmux
@@ -221,7 +232,7 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     lastentry=bootstrap
     for i in $(seq 0 $((masters-1))); do
 	mac=$(yq -r .master[$i].mac setup.conf.yaml | tr '[:upper:]' '[:lower:]')
-        sed -i "/dhcp-host=.*,${lastentry}/a dhcp-host=${mac},192.168.222.2${i},master$i" dnsmasq/dnsmasq.conf 
+        sed -i "/dhcp-host=.*,${lastentry}/a dhcp-host=${mac},192.168.222.2${i},master$i" dnsmasq/dnsmasq.conf
         lastentry=master$i
         m=$(echo $mac | sed s/\:/-/g | tr '[:upper:]' '[:lower:]')
         disable_ifs=$(yq -r ".master[$i].disable_int | length" setup.conf.yaml)
@@ -250,9 +261,9 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         if ((disable_ifs == 0)); then
             /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/01-${m}
         else
-            /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/worker${i} 
+            /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/worker${i}
             ### setup individual ign file
-            sed -i s/worker.ign/worker${i}.ign/ ${PXEDIR}/worker${i} 
+            sed -i s/worker.ign/worker${i}.ign/ ${PXEDIR}/worker${i}
             /bin/cp -f ${PXEDIR}/worker${i} ${PXEDIR}/01-${m}
             mkdir -p fix-ign-worker${i}/etc/sysconfig/network-scripts/
             for j in $(seq 0 $((disable_ifs-1))); do
@@ -278,7 +289,7 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
 		nmcli con add type vlan autoconnect yes con-name $BM_IF.$BM_VLAN ifname $BM_IF.$BM_VLAN dev $BM_IF id $BM_VLAN master baremetal slave-type bridge
 		sudo nmcli con reload $BM_IF.$BM_VLAN
 		sudo nmcli con up $BM_IF.$BM_VLAN
-        else 
+        else
         	sudo nmcli con down $BM_IF || true
         	sudo nmcli con del $BM_IF || true
         	sudo nmcli con add type bridge-slave autoconnect yes con-name $BM_IF ifname $BM_IF master baremetal
@@ -286,7 +297,7 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         	sudo nmcli con up $BM_IF
 	fi
     fi
-   
+
     disable_firewalld=$(yq -r .disable_firewalld setup.conf.yaml)
     if [[ "${disable_firewalld}" == "true" ]]; then
         echo "disable firewalld and selinux"
@@ -301,15 +312,15 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         sudo setenforce 0 || true
         sudo sed -i --follow-symlinks 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/sysconfig/selinux
         echo "selinux disabled"
-    fi 
-    
+    fi
+
     echo "disable libvirt default network"
     if virsh net-list | grep default; then
         sudo virsh net-destroy default
         sudo virsh net-undefine default
         echo "virsh default network destroyed"
     fi
-    
+
     echo "setup libvirt network ocp4-upi"
     if ! virsh net-list | grep ocp4-upi; then
         virsh net-define ocp4-upi-net.xml
@@ -317,8 +328,8 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         virsh net-start ocp4-upi
         echo "virsh network ocp4-upi started"
     fi
-   
-    reset_iptables=$(yq -r .reset_iptables setup.conf.yaml)  
+
+    reset_iptables=$(yq -r .reset_iptables setup.conf.yaml)
     if [[ "${reset_iptables}" == "true" ]]; then
         echo "reset iptables"
         sudo iptables -F
@@ -350,13 +361,13 @@ EOF
         sudo iptables -t nat -A POSTROUTING -s 192.168.222.0/24 ! -d 192.168.222.0/24 -o $oif -j MASQUERADE
         # add systemd service to run the iptable to make it survive the reboot
         systemctl enable ocp-iptables
-        sed -i "/^except-interface=lo/a except-interface=${oif}" dnsmasq/dnsmasq.conf 
+        sed -i "/^except-interface=lo/a except-interface=${oif}" dnsmasq/dnsmasq.conf
         echo "MASQUERADE set on bastion"
     fi
     sudo echo 1 > /proc/sys/net/ipv4/ip_forward
     sudo sed -i '/net.ipv4.ip_forward.*/d' /etc/sysctl.conf
     sudo echo net.ipv4.ip_forward=1 >> /etc/sysctl.conf
-    
+
     echo "set up /etc/resolv.conf"
     sed -i 's/^search.*/search test.myocp4.com/' /etc/resolv.conf
     if ! grep 192.168.222.1 /etc/resolv.conf; then
@@ -371,7 +382,7 @@ EOF
          add_pxe_files
          sed -i s/Listen\ 80/Listen\ 81/ /etc/httpd/conf/httpd.conf
          sudo systemctl enable haproxy httpd dnsmasq
-         sudo systemctl restart haproxy httpd dnsmasq 
+         sudo systemctl restart haproxy httpd dnsmasq
          echo "haproxy httpd dnsmasq started on bastion as systemd service"
     else
          sh services.sh
@@ -412,11 +423,11 @@ if [[ "${update_installer:-false}" == "true" ]]; then
     release_image=$(sed -n -r 's/.*Pull From:\s*(.*)/\1/p' release.txt)
     /bin/rm -rf release.txt
     mkdir -p tmp
-    wget -N -P tmp ${release_url}/${version}/openshift-client-linux-${release_version}.tar.gz 
+    wget -N -P tmp ${release_url}/${version}/openshift-client-linux-${release_version}.tar.gz
     wget -N -P tmp ${release_url}/${version}/openshift-install-linux-${release_version}.tar.gz
 
     sudo /bin/rm -rf /usr/local/bin/{kubectl,oc,openshift*}
-    sudo tar -C /usr/local/bin -xzf tmp/openshift-client-linux-${release_version}.tar.gz 
+    sudo tar -C /usr/local/bin -xzf tmp/openshift-client-linux-${release_version}.tar.gz
     sudo tar -C /usr/local/bin -xzf tmp/openshift-install-linux-${release_version}.tar.gz
     /bin/rm -rf tmp
 fi
@@ -437,7 +448,7 @@ if [[ "${update_rhcos}" == "true" ]]; then
     images[ramdisk]=$(echo "$SHA256" | grep live-initramfs | rev | cut -d ' ' -f 1 | rev | head -n 1)
     images[kernel]=$(echo "$SHA256" | grep live-kernel | rev | cut -d ' ' -f 1 | rev | head -n 1)
     images[metal]=$(echo "$SHA256" | grep live-rootfs | rev | cut -d ' ' -f 1 | rev | head -n 1)
-    mkdir -p ${dir_httpd} && chmod a+rx ${dir_httpd} 
+    mkdir -p ${dir_httpd} && chmod a+rx ${dir_httpd}
     for image in ramdisk kernel metal; do
         if [ -f ${dir_httpd}/${image} ]; then
             expected=$(echo "$SHA256" | grep ${images[$image]} | cut -d ' ' -f 1)
@@ -475,7 +486,10 @@ chrony_base64=$(cat chrony.conf.tmp | base64 -w0)
 pushd ~/ocp4-upi-install-1
 openshift-install create manifests
 # disable pod schedule on master nodes
-sed -i s/mastersSchedulable.*/mastersSchedulable:\ False/ manifests/cluster-scheduler-02-config.yml
+worker_on_master=$(get_cfg_value '.worker_on_master' 'true')
+if [[ "${worker_on_master}" == "false" ]]; then
+    sed -i s/mastersSchedulable.*/mastersSchedulable:\ False/ manifests/cluster-scheduler-02-config.yml
+fi
 
 # copy extra manifest files
 if [[ -d $SCRIPTPATH/manifests ]]; then
@@ -487,11 +501,11 @@ fi
 # take care of local chronyd setting
 for role in "master" "worker"; do
     sed -e "s/%%role%%/${role}/g" -e "s/%%chrony_base64%%/${chrony_base64}/g" chrony.yaml.tmpl > manifests/50-${role}-chrony.yaml
-done    
+done
 
 echo "create ignition files"
 openshift-install create ignition-configs
-/usr/bin/cp -f *.ign ${dir_httpd} 
+/usr/bin/cp -f *.ign ${dir_httpd}
 popd
 
 echo "copy kubeconfig file"
@@ -502,16 +516,16 @@ echo "copy kubeconfig file"
 
 for d in $(ls -d fix-ign-master*); do
     node=$(echo $d | sed -r 's/fix-ign-(master.*)/\1/')
-    /usr/bin/cp -f ~/ocp4-upi-install-1/master.ign ./ 
+    /usr/bin/cp -f ~/ocp4-upi-install-1/master.ign ./
     filetranspile -i master.ign -f $d -o ${node}.ign
-    /usr/bin/cp -f ${node}.ign ${dir_httpd} 
+    /usr/bin/cp -f ${node}.ign ${dir_httpd}
 done
 
 for d in $(ls -d fix-ign-worker*); do
     node=$(echo $d | sed -r 's/fix-ign-(worker.*)/\1/')
     /usr/bin/cp -f ~/ocp4-upi-install-1/worker.ign ./
     filetranspile -i worker.ign -f $d -o ${node}.ign
-    /usr/bin/cp -f ${node}.ign ${dir_httpd}    
+    /usr/bin/cp -f ${node}.ign ${dir_httpd}
 done
 
 chmod a+rx ${dir_httpd}/*
@@ -523,10 +537,10 @@ virt-install -n ocp4-upi-bootstrap --pxe --os-type=Linux --os-variant=rhel8.0 --
 while true; do
     sleep 3
     if virsh list --state-shutoff | grep ocp4-upi-bootstrap; then
-       virsh start ocp4-upi-bootstrap 
+       virsh start ocp4-upi-bootstrap
        break
     fi
-done       
+done
 
 echo "start master ..."
 vmcount=0
@@ -565,7 +579,7 @@ while [[ ${vmcount} -gt 0 ]]; do
         if virsh list --all | grep 'shut off'; then
             vm=$(virsh list --state-shutoff | awk '/shut off/{print $2; exit;}')
             virsh start ${vm}
-            vmcount=$((vmcount-1)) 
+            vmcount=$((vmcount-1))
         fi
 done
 
@@ -603,7 +617,7 @@ while [[ ${vmcount} -gt 0 ]]; do
         if virsh list --all | grep 'shut off'; then
             vm=$(virsh list --state-shutoff | awk '/shut off/{print $2; exit;}')
             virsh start ${vm}
-            vmcount=$((vmcount-1)) 
+            vmcount=$((vmcount-1))
         fi
 done
 
@@ -620,6 +634,32 @@ tmux new-session -s csr -d "${cmd}"
 
 > /root/.ssh/known_hosts
 
-echo "The baremetal machine should reboot twice; If the baremetal machine keep doing PXE boot then the BIOS boot order is incorrect. The hard drive should be the first boot device."
-echo "watch oc get clusterversion to get progress status"
- 
+status="False"
+count=300
+printf "waiting for clusterversion available"
+while [[ "${status}" != "True" ]]; do
+    if ((count == 0)); then
+        printf "\ntimeout waiting for clusterversion!\n"
+        exit 1
+    fi
+    count=$((count-1))
+    printf "."
+    sleep 5
+    status=$(oc get clusterversion -o json 2>/dev/null | jq -r '.items[0].status.conditions[] | select(.type == "Available") | .status' || echo "False")
+done
+printf "\nocp cluster is up\n"
+
+# count the number of live workers and make sure all workers are up
+live_workers=0
+count=300
+printf "waiting for all ${workers} workers up"
+while ((live_workers != workers)); do
+    if ((count == 0)); then
+        printf "\ntimeout waiting for all ${workers} workers up!\n"
+        exit 1
+    fi
+    printf "."
+    sleep 5
+    live_workers=$(oc get nodes 2>/dev/null | egrep '^worker.*Ready' | wc -l)
+done
+
