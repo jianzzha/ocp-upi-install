@@ -316,8 +316,8 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
 
     echo "disable libvirt default network"
     if virsh net-list | grep default; then
-        sudo virsh net-destroy default
-        sudo virsh net-undefine default
+        sudo virsh net-destroy default || true
+        sudo virsh net-undefine default || true
         echo "virsh default network destroyed"
     fi
 
@@ -662,4 +662,4 @@ while ((live_workers != workers)); do
     sleep 5
     live_workers=$(oc get nodes 2>/dev/null | egrep '^worker.*Ready' | wc -l)
 done
-
+printf "\nall ${workers} workers up\n"
