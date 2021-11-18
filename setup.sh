@@ -304,6 +304,10 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         sudo systemctl disable --now firewalld
         echo "after disable firewalld, restart libvirt"
         sudo systemctl restart libvirtd
+    else
+        sudo firewall-cmd --permanent --add-service=dhcp --add-service=dns --add-service=http --add-service=https
+        sudo firewall-cmd --permanent --add-port=81/tcp --add-port=2380/tcp --add-port=22623/tcp --add-port=6443/tcp
+        sudo firewall-cmd --reload
     fi
 
     disable_selinux=$(yq -r .disable_selinux setup.conf.yaml)
