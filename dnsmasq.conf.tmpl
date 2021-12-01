@@ -17,7 +17,9 @@ dhcp-option=42,0.0.0.0
 
 enable-tftp
 tftp-root=/var/lib/tftpboot
-dhcp-boot=lpxelinux.0
+dhcp-vendorclass=BIOS,PXEClient:Arch:00000
+dhcp-boot=tag:BIOS,lpxelinux.0
+dhcp-boot=tag:!BIOS,shimx64.efi
 address=/api.test.myocp4.com/192.168.222.1
 address=/api-int.test.myocp4.com/192.168.222.1
 address=/etcd-0.test.myocp4.com/192.168.222.20

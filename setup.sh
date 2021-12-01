@@ -452,8 +452,9 @@ if [[ "${update_rhcos}" == "true" ]]; then
     images[ramdisk]=$(echo "$SHA256" | grep live-initramfs | rev | cut -d ' ' -f 1 | rev | head -n 1)
     images[kernel]=$(echo "$SHA256" | grep live-kernel | rev | cut -d ' ' -f 1 | rev | head -n 1)
     images[metal]=$(echo "$SHA256" | grep live-rootfs | rev | cut -d ' ' -f 1 | rev | head -n 1)
+    images[iso]=$(echo "$SHA256" | grep iso | rev | cut -d ' ' -f 1 | rev | head -n 1)
     mkdir -p ${dir_httpd} && chmod a+rx ${dir_httpd}
-    for image in ramdisk kernel metal; do
+    for image in ramdisk kernel metal iso; do
         if [ -f ${dir_httpd}/${image} ]; then
             expected=$(echo "$SHA256" | grep ${images[$image]} | cut -d ' ' -f 1)
             existing=$(sha256sum ${dir_httpd}/${image} | awk '{print $1}')
@@ -467,6 +468,20 @@ if [[ "${update_rhcos}" == "true" ]]; then
         curl -L -o ${dir_httpd}/${image} "$RHCOS_IMAGES_BASE_URI/${images[$image]}"
     done
 fi
+
+echo "copy shimx64.efi,grubx64.efi"
+mkdir -p /mnt/iso
+mkdir -p /mnt/efiboot
+mount -o loop ${dir_httpd}/iso /mnt/iso
+mount -o loop,ro /mnt/iso/images/efiboot.img /mnt/efiboot
+/bin/cp -f /mnt/efiboot/EFI/redhat/{shimx64.efi,grubx64.efi} ${dir_tftpboot}
+umount /mnt/efiboot
+umount /mnt/iso
+/bin/rm -rf /mnt/efiboot /mnt/iso
+
+ln -s -T ${dir_httpd}/ramdisk ${dir_tftpboot}/ramdisk
+ln -s -T ${dir_httpd}/kernel  ${dir_tftpboot}/kernel
+/bin/cp -f grub.cfg ${dir_tftpboot}
 
 echo "remove exisiting install directory"
 [ -d ~/ocp4-upi-install-1 ] && rm -rf  ~/ocp4-upi-install-1
