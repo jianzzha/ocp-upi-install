@@ -475,12 +475,11 @@ mkdir -p /mnt/efiboot
 mount -o loop ${dir_httpd}/iso /mnt/iso
 mount -o loop,ro /mnt/iso/images/efiboot.img /mnt/efiboot
 /bin/cp -f /mnt/efiboot/EFI/redhat/{shimx64.efi,grubx64.efi} ${dir_tftpboot}
-umount /mnt/efiboot
-umount /mnt/iso
-/bin/rm -rf /mnt/efiboot /mnt/iso
+umount -l /mnt/efiboot
+umount -l /mnt/iso
 
-ln -s -T ${dir_httpd}/ramdisk ${dir_tftpboot}/ramdisk
-ln -s -T ${dir_httpd}/kernel  ${dir_tftpboot}/kernel
+ln -sf -T ${dir_httpd}/ramdisk ${dir_tftpboot}/ramdisk
+ln -sf -T ${dir_httpd}/kernel  ${dir_tftpboot}/kernel
 /bin/cp -f grub.cfg ${dir_tftpboot}
 
 echo "remove exisiting install directory"
