@@ -620,12 +620,16 @@ for i in $(seq 0 $((workers-1))); do
         ipmi_addr=$(yq -r .worker[$i].ipmi_addr setup.conf.yaml)
         ipmi_user=$(yq -r .worker[$i].ipmi_user setup.conf.yaml)
         ipmi_password=$(yq -r .worker[$i].ipmi_password setup.conf.yaml)
+	uefi=$(yq -r .worker[$i].uefi setup.conf.yaml | awk '{print tolower($0)}')
         if [[ "${lab_name}" == "alias" ]]; then
             echo "change alias lab boot order"
             podman run -it --rm  quay.io/jianzzha/alias -H ${ipmi_addr} -u ${ipmi_user} -p ${ipmi_password} -i config/idrac_interfaces.yml -t upi
         fi
-
-        ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev pxe
+	pxe_opt=""
+        if [[ "${uefi}" == "true" ]]; then
+            pxe_opt="options=efiboot"
+	fi
+        ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev pxe ${pxe_opt}
         ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
     fi
 done
