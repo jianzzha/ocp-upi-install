@@ -36,19 +36,19 @@ function build_badfish_image {
 
 function add_pxe_files {
     mkdir -p tmp_syslinux
-    sudo mkdir -p /var/lib/tftpboot
+    mkdir -p /var/lib/tftpboot
     curl -s -o tmp_syslinux/syslinux.zip https://mirrors.edge.kernel.org/pub/linux/utils/boot/syslinux/syslinux-6.03.zip
     pushd tmp_syslinux && unzip syslinux.zip && popd
-    sudo /bin/cp -f tmp_syslinux/bios/core/lpxelinux.0 /var/lib/tftpboot
-    sudo /bin/cp -f tmp_syslinux/bios/com32/elflink/ldlinux/ldlinux.c32 /var/lib/tftpboot
+    /bin/cp -f tmp_syslinux/bios/core/lpxelinux.0 /var/lib/tftpboot
+    /bin/cp -f tmp_syslinux/bios/com32/elflink/ldlinux/ldlinux.c32 /var/lib/tftpboot
     /bin/rm -rf tmp_syslinux
 }
 
 function install_docker {
     echo "install docker"
-    sudo yum install -y yum-utils device-mapper-persistent-data lvm2
-    sudo yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
-    sudo yum install -y containerd.io-1.2.13 docker-ce-19.03.8 docker-ce-cli-19.03.8
+    yum install -y yum-utils device-mapper-persistent-data lvm2
+    yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo
+    yum install -y containerd.io-1.2.13 docker-ce-19.03.8 docker-ce-cli-19.03.8
     start_docker_daemon
 }
 
@@ -58,13 +58,13 @@ function install_runtime {
     if [[ "${ID}" == "rhel" ]]; then
         if [[ "${VERSION_ID}" =~ ^7 ]]; then
             if [[ "${container_runtime}" == "podman" ]]; then
-                local my_subscription_status=$(sudo subscription-manager status | sed -n -r 's/Overall Status: (\w+)/\1/p')
+                local my_subscription_status=$(subscription-manager status | sed -n -r 's/Overall Status: (\w+)/\1/p')
                 if [[ "${my_subscription_status}" != "Current" ]]; then
                     echo "please register this system before proceed!"
                     exit 1
                 fi
-                sudo subscription-manager repos --enable rhel-7-server-extras-rpms
-                sudo yum install -y podman
+                subscription-manager repos --enable rhel-7-server-extras-rpms
+                yum install -y podman
             elif [[ "${container_runtime}" == "docker" ]]; then
                 install_docker
             else
@@ -73,7 +73,7 @@ function install_runtime {
             fi
         elif [[ "${VERSION_ID}" =~ ^8 ]]; then
             if [[ "${container_runtime}" == "podman" ]]; then
-                sudo yum install -y podman
+                yum install -y podman
             else
                 echo "For rhel8, only podman is supported!"
                  exit 1
@@ -84,7 +84,7 @@ function install_runtime {
         fi
     elif [[ "${ID}" = "centos" ]]; then
         if [[ "${container_runtime}" == "podman" ]]; then
-            sudo yum install -y podman
+            yum install -y podman
         elif [[ "${container_runtime}" == "docker" ]]; then
             install_docker
         else
@@ -95,6 +95,32 @@ function install_runtime {
         echo "only rhel or centos supported!"
         exit 1
     fi
+}
+
+
+function add_bm_int {
+    # use bm_int_added as flag to check if this has been done, by default it is false
+    if [[ "${bm_int_added:-false}" == "true" ]]; then
+        return
+    fi
+    BM_IF=$(yq -r .baremetal_phy_int setup.conf.yaml)
+    BM_VLAN=$(yq -r .baremetal_vlan setup.conf.yaml)
+    if [[ -n "${BM_IF}" && "${BM_IF}" != "null" ]]; then
+        if [[ -n "${BM_VLAN}" && "${BM_VLAN}" != "null" ]]; then
+		nmcli con down $BM_IF.$BM_VLAN || true
+		nmcli con del $BM_IF.$BM_VLAN || true
+		nmcli con add type vlan autoconnect yes con-name $BM_IF.$BM_VLAN ifname $BM_IF.$BM_VLAN dev $BM_IF id $BM_VLAN master baremetal slave-type bridge
+		nmcli con reload $BM_IF.$BM_VLAN
+		nmcli con up $BM_IF.$BM_VLAN
+        else
+        	nmcli con down $BM_IF || true
+        	nmcli con del $BM_IF || true
+        	nmcli con add type bridge-slave autoconnect yes con-name $BM_IF ifname $BM_IF master baremetal
+        	nmcli con reload $BM_IF
+        	nmcli con up $BM_IF
+	fi
+    fi
+    bm_int_added=true
 }
 
 function disable_interface {
@@ -128,7 +154,7 @@ systemctl enable --now docker
 }
 
 if ! command -v wget >/dev/null 2>&1; then
-    sudo yum -y install wget
+    yum -y install wget
 fi
 
 if ! command -v yq >/dev/null 2>&1; then
@@ -136,8 +162,8 @@ if ! command -v yq >/dev/null 2>&1; then
     yum -y install jq python3 python3-pip
     if ! command -v jq >/dev/null 2>&1; then
 	#yum failed to install jq, due to repo issue
-	sudo wget -O /usr/local/bin/jq https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64
-	sudo chmod 0755 /usr/local/bin/jq
+	wget -O /usr/local/bin/jq https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64
+	chmod 0755 /usr/local/bin/jq
     fi
     pip3 install yq
 fi
@@ -150,8 +176,8 @@ fi
 
 if ! command -v filetranspile >/dev/null 2>&1; then
     echo "download filetranspile"
-    sudo curl -o /usr/local/bin/filetranspile https://raw.githubusercontent.com/ashcrow/filetranspiler/18/filetranspile
-    sudo chmod u+x /usr/local/bin/filetranspile
+    curl -o /usr/local/bin/filetranspile https://raw.githubusercontent.com/ashcrow/filetranspiler/18/filetranspile
+    chmod u+x /usr/local/bin/filetranspile
     echo "pip install modules for filetranspile"
     pip3 install PyYAML
 fi
@@ -273,55 +299,38 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         fi
     done
 
-    sudo systemctl enable NetworkManager --now
-    sudo nmcli con down baremetal || true
-    sudo nmcli con del baremetal || true
-    sudo nmcli con add type bridge ifname baremetal con-name baremetal ipv4.method manual ipv4.addr 192.168.222.1/24 ipv4.dns 192.168.222.1 ipv4.dns-priority 10 autoconnect yes bridge.stp no
-    sudo nmcli con reload baremetal
-    sudo nmcli con up baremetal
+    systemctl enable NetworkManager --now
+    nmcli con down baremetal || true
+    nmcli con del baremetal || true
+    nmcli con add type bridge ifname baremetal con-name baremetal ipv4.method manual ipv4.addr 192.168.222.1/24 ipv4.dns 192.168.222.1 ipv4.dns-priority 10 autoconnect yes bridge.stp no
+    nmcli con reload baremetal
+    nmcli con up baremetal
 
-    BM_IF=$(yq -r .baremetal_phy_int setup.conf.yaml)
-    BM_VLAN=$(yq -r .baremetal_vlan setup.conf.yaml)
-    if [[ -n "${BM_IF}" && "${BM_IF}" != "null" ]]; then
-        if [[ -n "${BM_VLAN}" && "${BM_VLAN}" != "null" ]]; then
-		sudo nmcli con down $BM_IF.$BM_VLAN || true
-		sudo nmcli con del $BM_IF.$BM_VLAN || true
-		nmcli con add type vlan autoconnect yes con-name $BM_IF.$BM_VLAN ifname $BM_IF.$BM_VLAN dev $BM_IF id $BM_VLAN master baremetal slave-type bridge
-		sudo nmcli con reload $BM_IF.$BM_VLAN
-		sudo nmcli con up $BM_IF.$BM_VLAN
-        else
-        	sudo nmcli con down $BM_IF || true
-        	sudo nmcli con del $BM_IF || true
-        	sudo nmcli con add type bridge-slave autoconnect yes con-name $BM_IF ifname $BM_IF master baremetal
-        	sudo nmcli con reload $BM_IF
-        	sudo nmcli con up $BM_IF
-	fi
-    fi
 
     disable_firewalld=$(yq -r .disable_firewalld setup.conf.yaml)
     if [[ "${disable_firewalld}" == "true" ]]; then
         echo "disable firewalld and selinux"
-        sudo systemctl disable --now firewalld
+        systemctl disable --now firewalld
         echo "after disable firewalld, restart libvirt"
-        sudo systemctl restart libvirtd
+        systemctl restart libvirtd
     else
-        sudo firewall-cmd --permanent --add-service=dhcp --add-service=dns --add-service=http --add-service=https
-        sudo firewall-cmd --permanent --add-port=81/tcp --add-port=2380/tcp --add-port=22623/tcp --add-port=6443/tcp
-        sudo firewall-cmd --reload
+        firewall-cmd --permanent --add-service=dhcp --add-service=dns --add-service=http --add-service=https
+        firewall-cmd --permanent --add-port=81/tcp --add-port=2380/tcp --add-port=22623/tcp --add-port=6443/tcp
+        firewall-cmd --reload
     fi
 
     disable_selinux=$(yq -r .disable_selinux setup.conf.yaml)
     if [[ "${disable_selinux}" == "true" ]]; then
         echo "disable selinux"
-        sudo setenforce 0 || true
-        sudo sed -i --follow-symlinks 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/sysconfig/selinux
+        setenforce 0 || true
+        sed -i --follow-symlinks 's/SELINUX=enforcing/SELINUX=disabled/g' /etc/sysconfig/selinux
         echo "selinux disabled"
     fi
 
     echo "disable libvirt default network"
     if virsh net-list | grep default; then
-        sudo virsh net-destroy default || true
-        sudo virsh net-undefine default || true
+        virsh net-destroy default || true
+        virsh net-undefine default || true
         echo "virsh default network destroyed"
     fi
 
@@ -336,10 +345,10 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     reset_iptables=$(yq -r .reset_iptables setup.conf.yaml)
     if [[ "${reset_iptables}" == "true" ]]; then
         echo "reset iptables"
-        sudo iptables -F
-        sudo iptables -X
-        sudo iptables -F -t nat
-        sudo iptables -X -t nat
+        iptables -F
+        iptables -X
+        iptables -F -t nat
+        iptables -X -t nat
         echo "iptables flushed"
     fi
 
@@ -362,15 +371,15 @@ RemainAfterExit=true
 [Install]
 WantedBy=multi-user.target
 EOF
-        sudo iptables -t nat -A POSTROUTING -s 192.168.222.0/24 ! -d 192.168.222.0/24 -o $oif -j MASQUERADE
+        iptables -t nat -A POSTROUTING -s 192.168.222.0/24 ! -d 192.168.222.0/24 -o $oif -j MASQUERADE
         # add systemd service to run the iptable to make it survive the reboot
         systemctl enable ocp-iptables
         sed -i "/^except-interface=lo/a except-interface=${oif}" dnsmasq/dnsmasq.conf
         echo "MASQUERADE set on bastion"
     fi
-    sudo echo 1 > /proc/sys/net/ipv4/ip_forward
-    sudo sed -i '/net.ipv4.ip_forward.*/d' /etc/sysctl.conf
-    sudo echo net.ipv4.ip_forward=1 >> /etc/sysctl.conf
+    echo 1 > /proc/sys/net/ipv4/ip_forward
+    sed -i '/net.ipv4.ip_forward.*/d' /etc/sysctl.conf
+    echo net.ipv4.ip_forward=1 >> /etc/sysctl.conf
 
     echo "set up /etc/resolv.conf"
     sed -i 's/^search.*/search test.myocp4.com/' /etc/resolv.conf
@@ -381,12 +390,12 @@ EOF
 
     mkdir -p ${dir_httpd}
     if [[ ${services_in_container} == "false" ]]; then
-         sudo cp haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg
-         sudo cp dnsmasq/dnsmasq.conf /etc/dnsmasq.conf
+         cp haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg
+         cp dnsmasq/dnsmasq.conf /etc/dnsmasq.conf
          add_pxe_files
          sed -i s/Listen\ 80/Listen\ 81/ /etc/httpd/conf/httpd.conf
-         sudo systemctl enable haproxy httpd dnsmasq
-         sudo systemctl restart haproxy httpd dnsmasq
+         systemctl enable haproxy httpd dnsmasq
+         systemctl restart haproxy httpd dnsmasq
          echo "haproxy httpd dnsmasq started on bastion as systemd service"
     else
          sh services.sh
@@ -430,9 +439,9 @@ if [[ "${update_installer:-false}" == "true" ]]; then
     wget -N -P tmp ${release_url}/${version}/openshift-client-linux-${release_version}.tar.gz
     wget -N -P tmp ${release_url}/${version}/openshift-install-linux-${release_version}.tar.gz
 
-    sudo /bin/rm -rf /usr/local/bin/{kubectl,oc,openshift*}
-    sudo tar -C /usr/local/bin -xzf tmp/openshift-client-linux-${release_version}.tar.gz
-    sudo tar -C /usr/local/bin -xzf tmp/openshift-install-linux-${release_version}.tar.gz
+    /bin/rm -rf /usr/local/bin/{kubectl,oc,openshift*}
+    tar -C /usr/local/bin -xzf tmp/openshift-client-linux-${release_version}.tar.gz
+    tar -C /usr/local/bin -xzf tmp/openshift-install-linux-${release_version}.tar.gz
     /bin/rm -rf tmp
 fi
 
@@ -493,9 +502,9 @@ cp install-config.yaml ~/ocp4-upi-install-1
 ntp_server=$(yq -r '.ntp_server' setup.conf.yaml)
 ntp_server=${ntp_server:-clock.redhat.com}
 sed -e "s/%%ntp_server%%/${ntp_server}/g" chrony.conf.tmpl > chrony.conf.tmp
-sudo /usr/bin/cp -f /etc/chrony.conf /etc/chrony.conf.bak
-sudo /usr/bin/cp -f chrony.conf.tmp /etc/chrony.conf
-sudo systemctl restart chronyd
+/usr/bin/cp -f /etc/chrony.conf /etc/chrony.conf.bak
+/usr/bin/cp -f chrony.conf.tmp /etc/chrony.conf
+systemctl restart chronyd
 chrony_base64=$(cat chrony.conf.tmp | base64 -w0)
 /usr/bin/cp -f chrony.yaml.tmpl ~/ocp4-upi-install-1/
 #clean up chrony related temp files
@@ -580,6 +589,7 @@ for i in $(seq 0 $((masters-1))); do
         mac=$(yq -r .master[$i].mac setup.conf.yaml)
         virt-install -n ocp4-upi-master${i} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network network=ocp4-upi,mac=${mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough;
     else
+        add_bm_int
         ipmi_addr=$(yq -r .master[$i].ipmi_addr setup.conf.yaml)
         ipmi_user=$(yq -r .master[$i].ipmi_user setup.conf.yaml)
         ipmi_password=$(yq -r .master[$i].ipmi_password setup.conf.yaml)
@@ -587,7 +597,10 @@ for i in $(seq 0 $((masters-1))); do
             echo "change alias lab boot order"
             podman run -it --rm  quay.io/jianzzha/alias -H ${ipmi_addr} -u ${ipmi_user} -p ${ipmi_password} -i config/idrac_interfaces.yml -t upi
         fi
-        ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev pxe
+        if [[ "${uefi}" == "true" ]]; then
+            pxe_opt="options=efiboot"
+	fi
+        ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev pxe ${pxe_opt}
         ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
     fi
 done
@@ -617,6 +630,7 @@ for i in $(seq 0 $((workers-1))); do
         mac=$(yq -r .worker[$i].mac setup.conf.yaml)
         virt-install -n ocp4-upi-worker${i} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network network=ocp4-upi,mac=${mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough
     else
+        add_bm_int
         ipmi_addr=$(yq -r .worker[$i].ipmi_addr setup.conf.yaml)
         ipmi_user=$(yq -r .worker[$i].ipmi_user setup.conf.yaml)
         ipmi_password=$(yq -r .worker[$i].ipmi_password setup.conf.yaml)
