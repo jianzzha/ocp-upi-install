@@ -593,6 +593,7 @@ for i in $(seq 0 $((masters-1))); do
         ipmi_addr=$(yq -r .master[$i].ipmi_addr setup.conf.yaml)
         ipmi_user=$(yq -r .master[$i].ipmi_user setup.conf.yaml)
         ipmi_password=$(yq -r .master[$i].ipmi_password setup.conf.yaml)
+	uefi=$(yq -r .worker[$i].uefi setup.conf.yaml | awk '{print tolower($0)}')
         if [[ "${lab_name}" == "alias" ]]; then
             echo "change alias lab boot order"
             podman run -it --rm  quay.io/jianzzha/alias -H ${ipmi_addr} -u ${ipmi_user} -p ${ipmi_password} -i config/idrac_interfaces.yml -t upi
