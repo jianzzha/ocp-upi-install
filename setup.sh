@@ -334,14 +334,6 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         echo "virsh default network destroyed"
     fi
 
-    echo "setup libvirt network ocp4-upi"
-    if ! virsh net-list | grep ocp4-upi; then
-        virsh net-define ocp4-upi-net.xml
-        virsh net-autostart ocp4-upi
-        virsh net-start ocp4-upi
-        echo "virsh network ocp4-upi started"
-    fi
-
     reset_iptables=$(yq -r .reset_iptables setup.conf.yaml)
     if [[ "${reset_iptables}" == "true" ]]; then
         echo "reset iptables"
@@ -560,7 +552,7 @@ chmod a+rx ${dir_httpd}/*
 ./delete-vm.sh
 
 echo "start bootstrap VM ..."
-virt-install -n ocp4-upi-bootstrap --pxe --os-type=Linux --os-variant=rhel8.0 --ram=8192 --vcpus=4 --network network=ocp4-upi,mac=52:54:00:f9:8e:41 --disk size=60,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough
+virt-install -n ocp4-upi-bootstrap --pxe --os-type=Linux --os-variant=rhel8.0 --ram=8192 --vcpus=4 --network bridge=baremetal,mac=52:54:00:f9:8e:41 --disk size=60,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough
 while true; do
     sleep 3
     if virsh list --state-shutoff | grep ocp4-upi-bootstrap; then
@@ -587,17 +579,18 @@ for i in $(seq 0 $((masters-1))); do
     if [[ ${type} == "virtual" ]]; then
         vmcount=$((vmcount+1))
         mac=$(yq -r .master[$i].mac setup.conf.yaml)
-        virt-install -n ocp4-upi-master${i} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network network=ocp4-upi,mac=${mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough;
+        virt-install -n ocp4-upi-master${i} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network bridge=baremetal,mac=${mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough;
     else
         add_bm_int
         ipmi_addr=$(yq -r .master[$i].ipmi_addr setup.conf.yaml)
         ipmi_user=$(yq -r .master[$i].ipmi_user setup.conf.yaml)
         ipmi_password=$(yq -r .master[$i].ipmi_password setup.conf.yaml)
-	uefi=$(yq -r .worker[$i].uefi setup.conf.yaml | awk '{print tolower($0)}')
+	uefi=$(yq -r .master[$i].uefi setup.conf.yaml | awk '{print tolower($0)}')
         if [[ "${lab_name}" == "alias" ]]; then
             echo "change alias lab boot order"
             podman run -it --rm  quay.io/jianzzha/alias -H ${ipmi_addr} -u ${ipmi_user} -p ${ipmi_password} -i config/idrac_interfaces.yml -t upi
         fi
+	pxe_opt=""
         if [[ "${uefi}" == "true" ]]; then
             pxe_opt="options=efiboot"
 	fi
@@ -629,7 +622,7 @@ for i in $(seq 0 $((workers-1))); do
     if [[ ${type} == "virtual" ]]; then
         vmcount=$((vmcount+1))
         mac=$(yq -r .worker[$i].mac setup.conf.yaml)
-        virt-install -n ocp4-upi-worker${i} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network network=ocp4-upi,mac=${mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough
+        virt-install -n ocp4-upi-worker${i} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network bridge=baremetal,mac=${mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough
     else
         add_bm_int
         ipmi_addr=$(yq -r .worker[$i].ipmi_addr setup.conf.yaml)
