@@ -218,7 +218,7 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     systemctl enable --now libvirtd
 
     if [[ "${services_in_container}" == "false" ]]; then
-        yum install -y httpd haproxy dnsmasq
+        yum install -y httpd dnsmasq
     fi
 
     /bin/cp -f install-config.yaml.tmpl install-config.yaml
@@ -245,59 +245,19 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     echo "set up pxe files"
     PXEDIR="${dir_tftpboot}/pxelinux.cfg"
     mkdir -p ${PXEDIR}
-    /bin/cp -f pxelinux-cfg.tmpl ${PXEDIR}/worker
-    /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/default
-    /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/bootstrap
-    # bootstrap is a VM with hardcode mac address
-    sed -i s/worker.ign/bootstrap.ign/ ${PXEDIR}/bootstrap
-    /bin/cp -f ${PXEDIR}/bootstrap ${PXEDIR}/01-52-54-00-f9-8e-41
-    /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/master
-    sed -i s/worker.ign/master.ign/ ${PXEDIR}/master
-    masters=$(yq -r '.master | length' setup.conf.yaml)
-    sed -i s/%%master-replicas%%/${masters}/ install-config.yaml
-    lastentry=bootstrap
-    for i in $(seq 0 $((masters-1))); do
-	mac=$(yq -r .master[$i].mac setup.conf.yaml | tr '[:upper:]' '[:lower:]')
-        sed -i "/dhcp-host=.*,${lastentry}/a dhcp-host=${mac},192.168.222.2${i},master$i" dnsmasq/dnsmasq.conf
-        lastentry=master$i
-        m=$(echo $mac | sed s/\:/-/g | tr '[:upper:]' '[:lower:]')
-        disable_ifs=$(yq -r ".master[$i].disable_int | length" setup.conf.yaml)
-        if ((disable_ifs == 0)); then
-            /bin/cp -f ${PXEDIR}/master ${PXEDIR}/01-${m}
-        else
-            /bin/cp -f ${PXEDIR}/master ${PXEDIR}/master${i}
-            ### setup individual ign file
-            sed -i s/master.ign/master${i}.ign/ ${PXEDIR}/master${i}
-            /bin/cp -f ${PXEDIR}/master${i} ${PXEDIR}/01-${m}
-            mkdir -p fix-ign-master${i}/etc/sysconfig/network-scripts/
-            for j in $(seq 0 $((disable_ifs-1))); do
-                ifname=$(yq -r .master[$i].disable_int[$j] setup.conf.yaml)
-                disable_interface master${i} ${ifname}
-            done
-        fi
-    done
-    workers=$(yq -r '.worker | length' setup.conf.yaml)
-    sed -i s/%%worker-replicas%%/${workers}/ install-config.yaml
-    for i in $(seq 0 $((workers-1))); do
-        mac=$(yq -r .worker[$i].mac setup.conf.yaml | tr '[:upper:]' '[:lower:]')
-        sed -i "/dhcp-host=.*,${lastentry}/a dhcp-host=${mac},192.168.222.$((30+i)),worker$i" dnsmasq/dnsmasq.conf
-        lastentry=worker$i
-        m=$(echo $mac | sed s/\:/-/g | tr '[:upper:]' '[:lower:]')
-        disable_ifs=$(yq -r ".worker[$i].disable_int | length" setup.conf.yaml)
-        if ((disable_ifs == 0)); then
-            /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/01-${m}
-        else
-            /bin/cp -f ${PXEDIR}/worker ${PXEDIR}/worker${i}
-            ### setup individual ign file
-            sed -i s/worker.ign/worker${i}.ign/ ${PXEDIR}/worker${i}
-            /bin/cp -f ${PXEDIR}/worker${i} ${PXEDIR}/01-${m}
-            mkdir -p fix-ign-worker${i}/etc/sysconfig/network-scripts/
-            for j in $(seq 0 $((disable_ifs-1))); do
-                ifname=$(yq -r .worker[$i].disable_int[$j] setup.conf.yaml)
-                disable_interface worker${i} ${ifname}
-            done
-        fi
-    done
+    /bin/cp -f pxelinux-cfg.tmpl ${PXEDIR}/master
+    mac=$(yq -r .master.mac setup.conf.yaml | tr '[:upper:]' '[:lower:]')
+    sed -i "s/%%master-mac%%/${mac}/" dnsmasq/dnsmasq.conf
+    m=$(echo $mac | sed s/\:/-/g)
+    disable_ifs=$(yq -r ".master.disable_int | length" setup.conf.yaml)
+    /bin/cp -f ${PXEDIR}/master ${PXEDIR}/01-${m}
+    if ((disable_ifs > 0)); then
+        mkdir -p fix-ign-master/etc/sysconfig/network-scripts/
+        for j in $(seq 0 $((disable_ifs-1))); do
+            ifname=$(yq -r .master.disable_int[$j] setup.conf.yaml)
+            disable_interface master ${ifname}
+        done
+    fi
 
     systemctl enable NetworkManager --now
     nmcli con down baremetal || true
@@ -390,13 +350,11 @@ EOF
 
     mkdir -p ${dir_httpd}
     if [[ ${services_in_container} == "false" ]]; then
-         cp haproxy/haproxy.cfg /etc/haproxy/haproxy.cfg
          cp dnsmasq/dnsmasq.conf /etc/dnsmasq.conf
          add_pxe_files
          sed -i s/Listen\ 80/Listen\ 81/ /etc/httpd/conf/httpd.conf
-         systemctl enable haproxy httpd dnsmasq
-         systemctl restart haproxy httpd dnsmasq
-         echo "haproxy httpd dnsmasq started on bastion as systemd service"
+         systemctl restart httpd dnsmasq
+         echo "httpd dnsmasq started on bastion as systemd service"
     else
          sh services.sh
          echo "service runs in containers"
@@ -458,9 +416,6 @@ if [[ "${update_rhcos}" == "true" ]]; then
     RHCOS_IMAGES_BASE_URI="https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/$rhcos_major_rel/latest/"
     SHA256=$(curl -sS "$RHCOS_IMAGES_BASE_URI"sha256sum.txt)
     declare -A images
-    images[ramdisk]=$(echo "$SHA256" | grep live-initramfs | rev | cut -d ' ' -f 1 | rev | head -n 1)
-    images[kernel]=$(echo "$SHA256" | grep live-kernel | rev | cut -d ' ' -f 1 | rev | head -n 1)
-    images[metal]=$(echo "$SHA256" | grep live-rootfs | rev | cut -d ' ' -f 1 | rev | head -n 1)
     images[iso]=$(echo "$SHA256" | grep iso | rev | cut -d ' ' -f 1 | rev | head -n 1)
     mkdir -p ${dir_httpd} && chmod a+rx ${dir_httpd}
     for image in ramdisk kernel metal iso; do
@@ -477,19 +432,6 @@ if [[ "${update_rhcos}" == "true" ]]; then
         curl -L -o ${dir_httpd}/${image} "$RHCOS_IMAGES_BASE_URI/${images[$image]}"
     done
 fi
-
-echo "copy shimx64.efi,grubx64.efi"
-mkdir -p /mnt/iso
-mkdir -p /mnt/efiboot
-mount -o loop ${dir_httpd}/iso /mnt/iso
-mount -o loop,ro /mnt/iso/images/efiboot.img /mnt/efiboot
-/bin/cp -f /mnt/efiboot/EFI/redhat/{shimx64.efi,grubx64.efi} ${dir_tftpboot}
-umount -l /mnt/efiboot
-umount -l /mnt/iso
-
-ln -sf -T ${dir_httpd}/ramdisk ${dir_tftpboot}/ramdisk
-ln -sf -T ${dir_httpd}/kernel  ${dir_tftpboot}/kernel
-/bin/cp -f grub.cfg ${dir_tftpboot}
 
 echo "remove exisiting install directory"
 [ -d ~/ocp4-upi-install-1 ] && rm -rf  ~/ocp4-upi-install-1
@@ -511,12 +453,6 @@ chrony_base64=$(cat chrony.conf.tmp | base64 -w0)
 /usr/bin/rm -rf chrony.conf.tmp
 
 pushd ~/ocp4-upi-install-1
-openshift-install create manifests
-# disable pod schedule on master nodes
-worker_on_master=$(get_cfg_value '.worker_on_master' 'true')
-if [[ "${worker_on_master}" == "false" ]]; then
-    sed -i s/mastersSchedulable.*/mastersSchedulable:\ False/ manifests/cluster-scheduler-02-config.yml
-fi
 
 # copy extra manifest files
 if [[ -d $SCRIPTPATH/manifests ]]; then
@@ -531,8 +467,13 @@ for role in "master" "worker"; do
 done
 
 echo "create ignition files"
-openshift-install create ignition-configs
-/usr/bin/cp -f *.ign ${dir_httpd}
+openshift-install create single-node-ignition-config
+
+/usr/bin/cp -f bootstrap-in-place-for-live-iso.ign ${dir_httpd}
+
+alias coreos-installer='podman run --privileged --rm -v /dev:/dev -v /run/udev:/run/udev -v $PWD:/data -w /data quay.io/coreos/coreos-installer:release'
+coreos-installer iso ignition embed -fi bootstrap-in-place-for-live-iso.ign ${dir_httpd}/iso 
+
 popd
 
 echo "copy kubeconfig file"
@@ -541,33 +482,15 @@ echo "copy kubeconfig file"
 [ -e ~/.kube/config ] && /bin/mv -f ~/.kube/config ~/.kube/config.bak
 /bin/cp -f ~/ocp4-upi-install-1/auth/kubeconfig ~/.kube/config
 
-for d in $(ls -d fix-ign-master*); do
-    node=$(echo $d | sed -r 's/fix-ign-(master.*)/\1/')
-    /usr/bin/cp -f ~/ocp4-upi-install-1/master.ign ./
-    filetranspile -i master.ign -f $d -o ${node}.ign
-    /usr/bin/cp -f ${node}.ign ${dir_httpd}
-done
-
-for d in $(ls -d fix-ign-worker*); do
-    node=$(echo $d | sed -r 's/fix-ign-(worker.*)/\1/')
-    /usr/bin/cp -f ~/ocp4-upi-install-1/worker.ign ./
-    filetranspile -i worker.ign -f $d -o ${node}.ign
-    /usr/bin/cp -f ${node}.ign ${dir_httpd}
+if [ -d fix-ign-master ]; then 
+    /usr/bin/cp -f ~/ocp4-upi-install-1/bootstrap-in-place-for-live-iso.ign ./
+    filetranspile -i bootstrap-in-place-for-live-iso.ign -f fix-ign-master -o master.ign 
+    /usr/bin/cp -f master.ign ${dir_httpd}
 done
 
 chmod a+rx ${dir_httpd}/*
 
 ./delete-vm.sh
-
-echo "start bootstrap VM ..."
-virt-install -n ocp4-upi-bootstrap --pxe --os-type=Linux --os-variant=rhel8.0 --ram=8192 --vcpus=4 --network network=ocp4-upi,mac=52:54:00:f9:8e:41 --disk size=60,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough
-while true; do
-    sleep 3
-    if virsh list --state-shutoff | grep ocp4-upi-bootstrap; then
-       virsh start ocp4-upi-bootstrap
-       break
-    fi
-done
 
 echo "start master ..."
 vmcount=0
@@ -581,81 +504,31 @@ if [[ "${lab_name}" == "alias" ]]; then
     fi
 fi
 
-masters=$(yq -r '.master | length' setup.conf.yaml)
-for i in $(seq 0 $((masters-1))); do
-    type=$(yq -r .master[$i].type setup.conf.yaml)
-    if [[ ${type} == "virtual" ]]; then
-        vmcount=$((vmcount+1))
-        mac=$(yq -r .master[$i].mac setup.conf.yaml)
-        virt-install -n ocp4-upi-master${i} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network network=ocp4-upi,mac=${mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough;
-    else
-        add_bm_int
-        ipmi_addr=$(yq -r .master[$i].ipmi_addr setup.conf.yaml)
-        ipmi_user=$(yq -r .master[$i].ipmi_user setup.conf.yaml)
-        ipmi_password=$(yq -r .master[$i].ipmi_password setup.conf.yaml)
-        if [[ "${lab_name}" == "alias" ]]; then
-            echo "change alias lab boot order"
-            podman run -it --rm  quay.io/jianzzha/alias -H ${ipmi_addr} -u ${ipmi_user} -p ${ipmi_password} -i config/idrac_interfaces.yml -t upi
-        fi
-        if [[ "${uefi}" == "true" ]]; then
-            pxe_opt="options=efiboot"
-	fi
-        ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev pxe ${pxe_opt}
-        ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
-    fi
-done
-
-while [[ ${vmcount} -gt 0 ]]; do
+type=$(yq -r .master[$i].type setup.conf.yaml)
+if [[ ${type} == "virtual" ]]; then
+    mac=$(yq -r .master.mac setup.conf.yaml)
+    virt-install -n ocp4-upi-master --pxe --os-type=Linux --os-variant=rhel8.0 --ram=36864 --vcpus=8 --network network=ocp4-upi,mac=${mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough;
+    while ! virsh list ocp4-upi-master | grep 'shut off';
         sleep 3
-        if virsh list --all | grep 'shut off'; then
-            vm=$(virsh list --state-shutoff | awk '/shut off/{print $2; exit;}')
-            virsh start ${vm}
-            vmcount=$((vmcount-1))
-        fi
-done
+    done
+    virsh start ocp4-upi-master
+else
+    add_bm_int
+    ipmi_addr=$(yq -r .master.ipmi_addr setup.conf.yaml)
+    ipmi_user=$(yq -r .master.ipmi_user setup.conf.yaml)
+    ipmi_password=$(yq -r .master.ipmi_password setup.conf.yaml)
+    if [[ "${lab_name}" == "alias" ]]; then
+        echo "change alias lab boot order"
+        podman run -it --rm  quay.io/jianzzha/alias -H ${ipmi_addr} -u ${ipmi_user} -p ${ipmi_password} -i config/idrac_interfaces.yml -t upi
+    fi
+    if [[ "${uefi}" == "true" ]]; then
+        pxe_opt="options=efiboot"
+    fi
+    ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev pxe ${pxe_opt}
+    ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
+fi
 
 openshift-install --dir ~/ocp4-upi-install-1 wait-for bootstrap-complete
-
-echo "delete bootstrap server ..."
-virsh destroy ocp4-upi-bootstrap
-virsh undefine ocp4-upi-bootstrap
-
-echo "start worker ..."
-vmcount=0
-workers=$(yq -r '.worker | length' setup.conf.yaml)
-for i in $(seq 0 $((workers-1))); do
-    type=$(yq -r .worker[$i].type setup.conf.yaml)
-    if [[ ${type} == "virtual" ]]; then
-        vmcount=$((vmcount+1))
-        mac=$(yq -r .worker[$i].mac setup.conf.yaml)
-        virt-install -n ocp4-upi-worker${i} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network network=ocp4-upi,mac=${mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough
-    else
-        add_bm_int
-        ipmi_addr=$(yq -r .worker[$i].ipmi_addr setup.conf.yaml)
-        ipmi_user=$(yq -r .worker[$i].ipmi_user setup.conf.yaml)
-        ipmi_password=$(yq -r .worker[$i].ipmi_password setup.conf.yaml)
-	uefi=$(yq -r .worker[$i].uefi setup.conf.yaml | awk '{print tolower($0)}')
-        if [[ "${lab_name}" == "alias" ]]; then
-            echo "change alias lab boot order"
-            podman run -it --rm  quay.io/jianzzha/alias -H ${ipmi_addr} -u ${ipmi_user} -p ${ipmi_password} -i config/idrac_interfaces.yml -t upi
-        fi
-	pxe_opt=""
-        if [[ "${uefi}" == "true" ]]; then
-            pxe_opt="options=efiboot"
-	fi
-        ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev pxe ${pxe_opt}
-        ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
-    fi
-done
-
-while [[ ${vmcount} -gt 0 ]]; do
-        sleep 3
-        if virsh list --all | grep 'shut off'; then
-            vm=$(virsh list --state-shutoff | awk '/shut off/{print $2; exit;}')
-            virsh start ${vm}
-            vmcount=$((vmcount-1))
-        fi
-done
 
 tmux kill-session -t csr 2>/dev/null || true
 cmd="while true; do \
@@ -685,17 +558,3 @@ while [[ "${status}" != "True" ]]; do
 done
 printf "\nocp cluster is up\n"
 
-# count the number of live workers and make sure all workers are up
-live_workers=0
-count=300
-printf "waiting for all ${workers} workers up"
-while ((live_workers != workers)); do
-    if ((count == 0)); then
-        printf "\ntimeout waiting for all ${workers} workers up!\n"
-        exit 1
-    fi
-    printf "."
-    sleep 5
-    live_workers=$(oc get nodes 2>/dev/null | egrep '^worker.*Ready' | wc -l)
-done
-printf "\nall ${workers} workers up\n"

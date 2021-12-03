@@ -11,7 +11,7 @@ dhcp-range=192.168.222.20,192.168.222.100
 dhcp-no-override
 dhcp-authoritative
 dhcp-lease-max=41
-dhcp-host=52:54:00:f9:8e:41,192.168.222.101,bootstrap
+dhcp-host=%%master-mac%%,192.168.222.101,master
 
 dhcp-option=42,0.0.0.0
 
@@ -20,12 +20,8 @@ tftp-root=/var/lib/tftpboot
 dhcp-vendorclass=BIOS,PXEClient:Arch:00000
 dhcp-boot=tag:BIOS,lpxelinux.0
 dhcp-boot=tag:!BIOS,shimx64.efi
-address=/api.test.myocp4.com/192.168.222.1
-address=/api-int.test.myocp4.com/192.168.222.1
-address=/etcd-0.test.myocp4.com/192.168.222.20
-address=/etcd-1.test.myocp4.com/192.168.222.21
-address=/etcd-2.test.myocp4.com/192.168.222.22
-address=/.apps.test.myocp4.com/192.168.222.1
+address=/api.test.myocp4.com/192.168.222.101
+address=/api-int.test.myocp4.com/192.168.222.101
+address=/etcd-0.test.myocp4.com/192.168.222.101
+address=/.apps.test.myocp4.com/192.168.222.101
 srv-host=_etcd-server-ssl._tcp.test.myocp4.com,etcd-0.test.myocp4.com.,2380,0,10
-srv-host=_etcd-server-ssl._tcp.test.myocp4.com,etcd-1.test.myocp4.com.,2380,0,10
-srv-host=_etcd-server-ssl._tcp.test.myocp4.com,etcd-2.test.myocp4.com.,2380,0,10
