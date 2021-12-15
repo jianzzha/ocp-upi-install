@@ -219,6 +219,8 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
 
     if [[ "${services_in_container}" == "false" ]]; then
         yum install -y httpd haproxy dnsmasq
+        /bin/cp -f /etc/dnsmasq.conf /etc/dnsmasq.conf.bak
+        /bin/rm -rf /etc/dnsmasq.d
     fi
 
     /bin/cp -f install-config.yaml.tmpl install-config.yaml
