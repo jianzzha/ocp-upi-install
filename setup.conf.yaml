@@ -12,6 +12,7 @@ version: "4.8.12"
 update_rhcos: true
 # rhcos version
 rhcos_major_rel: "4.8"
+rhcos_minor_rel: "4.8.2"
 live_iso: rhcos-live.x86_64.iso
 
 # master struction has member: type(virtual|baremetal), mac, ipmi_user, ipmi_password

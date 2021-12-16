@@ -210,6 +210,11 @@ fi
 
 rhcos_major_rel=$(yq -r '.rhcos_major_rel' setup.conf.yaml)
 
+rhcos_minor_rel=$(yq -r '.rhcos_minor_rel' setup.conf.yaml)
+if [[ "${rhcos_minor_rel}" == "null" ]]; then
+    rhcos_minor_rel="latest"
+fi
+
 if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     echo "entering first time setup"
     [ -f ~/clean-interfaces.sh ] && ~/clean-interfaces.sh --nuke
@@ -449,8 +454,8 @@ fi
 
 live_iso=$(yq -r '.live_iso' setup.conf.yaml)
 if [[ "${update_rhcos}" == "true" ]]; then
-    OPENSHIFT_RHCOS_MINOR_REL="$(curl -sS https://mirror.openshift.com/pub/openshift-v4/x86_64/dependencies/rhcos/$rhcos_major_rel/latest/ | grep rhcos-$rhcos_major_rel | head -1 | cut -d '-' -f 2)"
-    RHCOS_IMAGES_BASE_URI="https://mirror.openshift.com/pub/openshift-v4/x86_64/dependencies/rhcos/$rhcos_major_rel/latest/"
+    #OPENSHIFT_RHCOS_MINOR_REL="$(curl -sS https://mirror.openshift.com/pub/openshift-v4/x86_64/dependencies/rhcos/$rhcos_major_rel/latest/ | grep rhcos-$rhcos_major_rel | head -1 | cut -d '-' -f 2)"
+    RHCOS_IMAGES_BASE_URI="https://mirror.openshift.com/pub/openshift-v4/x86_64/dependencies/rhcos/${rhcos_major_rel}/${rhcos_minor_rel}/"
     SHA256=$(curl -sS "$RHCOS_IMAGES_BASE_URI"sha256sum.txt)
     declare -A images
     images[ramdisk]=$(echo "$SHA256" | grep live-initramfs | rev | cut -d ' ' -f 1 | rev | head -n 1)
