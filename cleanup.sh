@@ -85,3 +85,10 @@ if [[ "${erase_dnsmasq:-false}" == "true" ]]; then
     fi
 fi
 
+if [[ -e /mnt/efiboot ]]; then
+    umount -l /mnt/efiboot 2>/dev/null || true
+fi
+
+if [[ -e /mnt/iso ]]; then
+    umount -l /mnt/iso 2>/dev/null || true
+fi

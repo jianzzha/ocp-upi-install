@@ -475,7 +475,7 @@ fi
 echo "copy shimx64.efi,grubx64.efi"
 mkdir -p /mnt/iso
 mkdir -p /mnt/efiboot
-mount -o loop ${dir_httpd}/iso /mnt/iso
+mount -o loop,ro ${dir_httpd}/iso /mnt/iso
 mount -o loop,ro /mnt/iso/images/efiboot.img /mnt/efiboot
 /bin/cp -f /mnt/efiboot/EFI/redhat/{shimx64.efi,grubx64.efi} ${dir_tftpboot}
 umount -l /mnt/efiboot
