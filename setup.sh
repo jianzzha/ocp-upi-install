@@ -447,17 +447,18 @@ if [[ "${services_in_container}" == "false" && ! -f /var/www/html/metal ]]; then
     update_rhcos=true
 fi
 
+live_iso=$(yq -r '.live_iso' setup.conf.yaml)
 if [[ "${update_rhcos}" == "true" ]]; then
-    OPENSHIFT_RHCOS_MINOR_REL="$(curl -sS https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/$rhcos_major_rel/latest/ | grep rhcos-$rhcos_major_rel | head -1 | cut -d '-' -f 2)"
-    RHCOS_IMAGES_BASE_URI="https://mirror.openshift.com/pub/openshift-v4/dependencies/rhcos/$rhcos_major_rel/latest/"
+    OPENSHIFT_RHCOS_MINOR_REL="$(curl -sS https://mirror.openshift.com/pub/openshift-v4/x86_64/dependencies/rhcos/$rhcos_major_rel/latest/ | grep rhcos-$rhcos_major_rel | head -1 | cut -d '-' -f 2)"
+    RHCOS_IMAGES_BASE_URI="https://mirror.openshift.com/pub/openshift-v4/x86_64/dependencies/rhcos/$rhcos_major_rel/latest/"
     SHA256=$(curl -sS "$RHCOS_IMAGES_BASE_URI"sha256sum.txt)
     declare -A images
     images[ramdisk]=$(echo "$SHA256" | grep live-initramfs | rev | cut -d ' ' -f 1 | rev | head -n 1)
     images[kernel]=$(echo "$SHA256" | grep live-kernel | rev | cut -d ' ' -f 1 | rev | head -n 1)
     images[metal]=$(echo "$SHA256" | grep live-rootfs | rev | cut -d ' ' -f 1 | rev | head -n 1)
-    images[iso]=$(echo "$SHA256" | grep iso | rev | cut -d ' ' -f 1 | rev | head -n 1)
+    images[${live_iso}]=$(echo "$SHA256" | grep ${live_iso} | rev | cut -d ' ' -f 1 | rev | head -n 1)
     mkdir -p ${dir_httpd} && chmod a+rx ${dir_httpd}
-    for image in ramdisk kernel metal iso; do
+    for image in ramdisk kernel metal ${live_iso}; do
         if [ -f ${dir_httpd}/${image} ]; then
             expected=$(echo "$SHA256" | grep ${images[$image]} | cut -d ' ' -f 1)
             existing=$(sha256sum ${dir_httpd}/${image} | awk '{print $1}')
@@ -468,14 +469,14 @@ if [[ "${update_rhcos}" == "true" ]]; then
                 /bin/rm -rf ${dir_httpd}/${image}
             fi
         fi
-        curl -L -o ${dir_httpd}/${image} "$RHCOS_IMAGES_BASE_URI/${images[$image]}"
+        curl -L -o ${dir_httpd}/${image} "$RHCOS_IMAGES_BASE_URI${images[$image]}"
     done
 fi
 
 echo "copy shimx64.efi,grubx64.efi"
 mkdir -p /mnt/iso
 mkdir -p /mnt/efiboot
-mount -o loop,ro ${dir_httpd}/iso /mnt/iso
+mount -o loop,ro ${dir_httpd}/${live_iso} /mnt/iso
 mount -o loop,ro /mnt/iso/images/efiboot.img /mnt/efiboot
 /bin/cp -f /mnt/efiboot/EFI/redhat/{shimx64.efi,grubx64.efi} ${dir_tftpboot}
 umount -l /mnt/efiboot
