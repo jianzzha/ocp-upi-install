@@ -218,7 +218,7 @@ fi
 if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     echo "entering first time setup"
     [ -f ~/clean-interfaces.sh ] && ~/clean-interfaces.sh --nuke
-    yum -y groupinstall 'Virtualization Host'
+    yum -y group install 'Virtualization Hypervisor'
     yum -y install ipmitool wget virt-install vim-enhanced git tmux
     systemctl enable --now libvirtd
 
