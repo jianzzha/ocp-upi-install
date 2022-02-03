@@ -215,6 +215,8 @@ if [[ "${rhcos_minor_rel}" == "null" ]]; then
     rhcos_minor_rel="latest"
 fi
 
+ntp_server=$(yq -r '.ntp_server' setup.conf.yaml)
+
 if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     echo "entering first time setup"
     [ -f ~/clean-interfaces.sh ] && ~/clean-interfaces.sh --nuke
@@ -247,6 +249,10 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     dns_forwarder=$(yq -r '.dns_forwarder' setup.conf.yaml)
     if [[ -n "${dns_forwarder}" && "null" != "${dns_forwarder}" ]]; then
         sed -i "/^interface=.*/a server=${dns_forwarder}" dnsmasq/dnsmasq.conf
+    fi
+
+    if [[ -n "${ntp_server}" && "null" != "${ntp_server}" ]]; then
+        sed -i "s/^dhcp-option=42,.*/dhcp-option=42,${ntp_server}/" dnsmasq/dnsmasq.conf
     fi
 
     echo "set up pxe files"
@@ -393,6 +399,7 @@ EOF
          cp dnsmasq/dnsmasq.conf /etc/dnsmasq.conf
          add_pxe_files
          sed -i s/Listen\ 80/Listen\ 81/ /etc/httpd/conf/httpd.conf
+         mkdir -p /etc/httpd/conf.d/ && echo 'Listen 10443 https' > /etc/httpd/conf.d/ssl.conf
          systemctl enable haproxy httpd dnsmasq
          systemctl restart haproxy httpd dnsmasq
          echo "haproxy httpd dnsmasq started on bastion as systemd service"
@@ -499,7 +506,6 @@ mkdir ~/ocp4-upi-install-1
 cp install-config.yaml ~/ocp4-upi-install-1
 
 # chrony prepare work need to be done in current directoty
-ntp_server=$(yq -r '.ntp_server' setup.conf.yaml)
 ntp_server=${ntp_server:-clock.redhat.com}
 sed -e "s/%%ntp_server%%/${ntp_server}/g" chrony.conf.tmpl > chrony.conf.tmp
 /usr/bin/cp -f /etc/chrony.conf /etc/chrony.conf.bak
