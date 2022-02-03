@@ -165,7 +165,8 @@ if ! command -v yq >/dev/null 2>&1; then
 	wget -O /usr/local/bin/jq https://github.com/stedolan/jq/releases/download/jq-1.6/jq-linux64
 	chmod 0755 /usr/local/bin/jq
     fi
-    pip3 install yq
+    # pip may failed to uninstall distutils packages, in that case, force overwrite
+    pip3 install yq || pip3 install --ignore-installed PyYAML yq
 fi
 
 container_runtime=$(yq -r '.container_runtime' setup.conf.yaml)
@@ -179,7 +180,8 @@ if ! command -v filetranspile >/dev/null 2>&1; then
     curl -o /usr/local/bin/filetranspile https://raw.githubusercontent.com/ashcrow/filetranspiler/18/filetranspile
     chmod u+x /usr/local/bin/filetranspile
     echo "pip install modules for filetranspile"
-    pip3 install PyYAML
+    # pip may failed to uninstall distutils packages, in that case, force overwrite
+    pip3 install PyYAML || pip3 install --ignore-installed PyYAML
 fi
 
 services_in_container=$(yq -r .services_in_container setup.conf.yaml)
