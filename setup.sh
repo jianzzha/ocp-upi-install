@@ -253,10 +253,6 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
         sed -i "/^interface=.*/a server=${dns_forwarder}" dnsmasq/dnsmasq.conf
     fi
 
-    if [[ -n "${ntp_server}" && "null" != "${ntp_server}" ]]; then
-        sed -i "s/^dhcp-option=42,.*/dhcp-option=42,${ntp_server}/" dnsmasq/dnsmasq.conf
-    fi
-
     echo "set up pxe files"
     PXEDIR="${dir_tftpboot}/pxelinux.cfg"
     mkdir -p ${PXEDIR}
@@ -389,6 +385,10 @@ EOF
     echo net.ipv4.ip_forward=1 >> /etc/sysctl.conf
 
     echo "set up /etc/resolv.conf"
+    if ! grep -q '^dns\s*=\s*none' /etc/NetworkManager/NetworkManager.conf; then
+        sed -i '/\[main\]/a dns=none' /etc/NetworkManager/NetworkManager.conf
+        systemctl restart NetworkManager
+    fi
     sed -i 's/^search.*/search test.myocp4.com/' /etc/resolv.conf
     if ! grep 192.168.222.1 /etc/resolv.conf; then
         sed -i '/^search/a nameserver\ 192.168.222.1' /etc/resolv.conf
@@ -512,6 +512,7 @@ ntp_server=${ntp_server:-clock.redhat.com}
 sed -e "s/%%ntp_server%%/${ntp_server}/g" chrony.conf.tmpl > chrony.conf.tmp
 /usr/bin/cp -f /etc/chrony.conf /etc/chrony.conf.bak
 /usr/bin/cp -f chrony.conf.tmp /etc/chrony.conf
+echo "allow 192.168.222.0/24" >> /etc/chrony.conf
 systemctl restart chronyd
 chrony_base64=$(cat chrony.conf.tmp | base64 -w0)
 /usr/bin/cp -f chrony.yaml.tmpl ~/ocp4-upi-install-1/
