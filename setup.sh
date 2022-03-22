@@ -419,15 +419,9 @@ EOF
     echo "bastion ssh key inserted into install-config.yaml"
 fi
 
-update_installer=$(yq -r '.update_installer' setup.conf.yaml)
-if ! command -v oc >/dev/null 2>&1; then
-    update_installer=true
-fi
-if ! command -v openshift-install >/dev/null 2>&1; then
-    update_installer=true
-fi
+update_installer=true
 
-if [[ "${update_installer:-false}" == "true" ]]; then
+if [[ "${update_installer}" == "true" ]]; then
     echo "download openshift images"
 
     build=$(yq -r .build setup.conf.yaml)

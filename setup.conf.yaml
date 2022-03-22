@@ -1,5 +1,3 @@
-# whether or not update the openshift installer binary
-update_installer: true
 # use released(or candidate) openshift installer binary
 #build: ga | dev
 build: ga
