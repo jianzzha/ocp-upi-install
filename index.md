@@ -1,37 +1,48 @@
-## Welcome to GitHub Pages
+# ocp-upi-install
 
-You can use the [editor on GitHub](https://github.com/jianzzha/ocp-upi-install/edit/gh-pages/index.md) to maintain and preview the content for your website in Markdown files.
+Verified installation host: rhel7.7; rhel 8 should work as well but not verified.
 
-Whenever you commit to this repository, GitHub Pages will run [Jekyll](https://jekyllrb.com/) to rebuild the pages in your site, from the content in your Markdown files.
+Verified services (httpd/haproxy/dnsmasq) running on the installation host. The script also support running these services
+using podman or docker, but they are not verified and may have issue.
 
-### Markdown
+To run the install, on the installtion host, as a root user, git clone this repo, then run ./setup.sh
 
-Markdown is a lightweight and easy-to-use syntax for styling your writing. It includes conventions for
+The install options are set in setup.conf.yaml, please follow the comment line in the setup.conf.yaml to make adjust.
 
-```markdown
-Syntax highlighted code block
+The following settings in setup.conf.yaml most likely need to change to fit your enviroment,
+* "version", OCP version
+* "rhcos_major_rel", rhcos version
+* "ipmi_addr", if you use baremetal worker, its ipmi address
+* "ipmi_user", if you use baremetal worker, its ipmi user name
+* "ipmi_password", if you use baremetal worker, its ipmi password
+* "disable_int", if you use baremetal worker, list the interfaces that should be disabled (to prevent multi home dhcp issue)
+* "baremetal_phy_int", this is the control node (or bastion) interface that is used to connect the baremetal workers
+* "baremetal_vlan", if vlan is used on "baremetal_phy_int" to connect the baremetal workers, put down the vlan id; otherwise remove
+* "ntp_server", ntp server in your network
 
-# Header 1
-## Header 2
-### Header 3
+### topology
 
-- Bulleted
-- List
+<img src="https://docs.google.com/drawings/d/e/2PACX-1vSCLG6HLcMAYDSXD76n6C0NaVaFA0gdXjna-BZ_lJyDkDRZ9XV_Z3HfkRQVFaHvbH7W35H82EoznpZr/pub?w=960&amp;h=720">
 
-1. Numbered
-2. List
+### prerequisites
 
-**Bold** and _Italic_ and `Code` text
+Before running the setup.sh script, use `yum update -y` to update RHEL.
 
-[Link](url) and ![Image](src)
-```
+**BIOS boot order on the baremetal hosts: 1. hard disk 2. PXE on the baremetal NIC.** 
 
-For more details see [Basic writing and formatting syntax](https://docs.github.com/en/github/writing-on-github/getting-started-with-writing-and-formatting-on-github/basic-writing-and-formatting-syntax).
+If BIOS boot order is not setup this way, manual intervention for baremetal hosts is required. For example, 
+currently Alias lab does not have  the hard disk as the first boot device, so alias lab requires manual intervention. 
 
-### Jekyll Themes
+Here is how to do the manual intervention:
 
-Your Pages site will use the layout and styles from the Jekyll theme you have selected in your [repository settings](https://github.com/jianzzha/ocp-upi-install/settings/pages). The name of this theme is saved in the Jekyll `_config.yml` configuration file.
+1. open console connection to the baremetal machine
+1. pxe boot on baremetal network
+   * ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev pxe
+   * ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
+1. Once the baremetal boots up and completes image download, it will reboot itself; once reboot happens,
+   * ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev disk
+   * ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
+1. the baremetal machine will boot into hard disk and do some self provision and reboot again, once the reboot happens,
+   * ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev disk
+   * ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
 
-### Support or Contact
-
-Having trouble with Pages? Check out our [documentation](https://docs.github.com/categories/github-pages-basics/) or [contact support](https://support.github.com/contact) and we’ll help you sort it out.
