@@ -321,7 +321,7 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     disable_firewalld=$(yq -r .disable_firewalld setup.conf.yaml)
     if [[ "${disable_firewalld}" == "true" ]]; then
         echo "disable firewalld and selinux"
-        systemctl disable --now firewalld
+        systemctl disable --now firewalld || true
         echo "after disable firewalld, restart libvirt"
         systemctl restart libvirtd
     else
@@ -481,12 +481,13 @@ if [[ "${update_rhcos}" == "true" ]]; then
     done
 fi
 
-echo "copy shimx64.efi,grubx64.efi"
+echo "copy grubx64.efi"
 mkdir -p /mnt/iso
 mkdir -p /mnt/efiboot
 mount -o loop,ro ${dir_httpd}/${live_iso} /mnt/iso
 mount -o loop,ro /mnt/iso/images/efiboot.img /mnt/efiboot
-/bin/cp -f /mnt/efiboot/EFI/redhat/{shimx64.efi,grubx64.efi} ${dir_tftpboot}
+sleep 1
+/bin/cp -f /mnt/efiboot/EFI/BOOT/grubx64.efi ${dir_tftpboot}
 umount -l /mnt/efiboot
 umount -l /mnt/iso
 
