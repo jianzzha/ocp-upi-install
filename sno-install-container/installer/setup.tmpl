@@ -37,6 +37,18 @@ function setup_baremetal_interface() {
     fi
 }
 
+function cleanup_baremetal_interface() {
+    if [[ -n "${BM_VLAN}" && "${BM_VLAN}" != "null" ]]; then
+        nmcli con down $BM_IF.$BM_VLAN 2>/dev/null || true
+        nmcli con del $BM_IF.$BM_VLAN 2>/dev/null || true
+    elif [[ "${BM_IF}" != "${default_route_interface}" ]]; then
+        nmcli con down $BM_IF || true
+        nmcli con del $BM_IF || true
+    fi
+    nmcli con down baremetal 2>/dev/null || true
+    nmcli con del baremetal 2>/dev/null || true
+}
+
 function setup_firewall() {
     if firewall-cmd --state 2>/dev/null; then
         firewall-cmd --permanent --add-service=dhcp --add-service=dns || true
@@ -45,17 +57,22 @@ function setup_firewall() {
 }
 
 function set_iptable_service() {
-    # do nothing if an MASQUERADE entry exists
-    if iptables -t nat -L POSTROUTING | egrep "MASQUERADE.*anywhere.*anywhere"; then
-       echo "MASQUERADE entry already exists!"
-       return
-    fi
+    cleanup_iptable_service
     /bin/cp -f ocp-iptables.sh /usr/local/bin/ocp-iptables.sh
     chmod u+x /usr/local/bin/ocp-iptables.sh
     /bin/cp -f ocp-iptables.service /usr/local/lib/systemd/system/ocp-iptables.service
     iptables -t nat -A POSTROUTING -s 192.168.222.0/24 ! -d 192.168.222.0/24 -o ${default_route_interface} -j MASQUERADE
 }
 
+function cleanup_iptable_service() {
+    /bin/rm -rf /usr/local/lib/systemd/system/ocp-iptables.service || true
+    /bin/rm -rf /usr/local/bin/ocp-iptables.sh || true
+    while iptables -C POSTROUTING -t nat -s 192.168.222.0/24 ! -d 192.168.222.0/24 \
+                   -o ${default_route_interface} -j MASQUERADE 2>/dev/null; do 
+        iptables -D POSTROUTING -t nat -s 192.168.222.0/24 ! -d 192.168.222.0/24 -o ${default_route_interface} -j MASQUERADE
+    done
+}
+        
 function remove_dnsmasq() {
     if podman container exists ocp-dnsmasq; then
         podman rm -f ocp-dnsmasq
@@ -131,6 +148,45 @@ function start_pxe_boot() {
     tool ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev pxe ${pxe_opt}
     tool ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
 }
+
+# if containers are still up, to re-deploy sno, "pxe" command will do
+if [[ ${1:-""} == "pxe" ]]; then
+    start_pxe_boot
+    exit 0
+fi
+
+# after host reboots, all containers are down, use "start-containers" to bring them backup
+if [[ ${1:-""} == "start-containers" ]]; then
+    setup_dnsmasq
+    setup_httpd
+    exit 0
+fi
+
+# command "clean" means remove containers and delete baremetal network
+if [[ ${1:-""} == "clean" ]]; then
+    remove_httpd
+    remove_dnsmasq
+    cleanup_baremetal_interface
+    cleanup_iptable_service
+    exit 0
+fi
+
+# command "setup-iptables" will re-establish the iptable entry
+if [[ ${1:-""} == "setup-iptables" ]]; then
+    set_iptable_service
+    exit 0
+fi
+
+# command "help" is self explaining
+if [[ ${1:-""} == "help" ]]; then
+    echo "Without a sub-command, $0 will install SNO from scratch"
+    echo "Available sub-commands:"
+    echo "    pxe: pxe boot the taget host" 
+    echo "    clean: clean up the network and service containers"
+    echo "    start-containers: re-start the service containers"
+    echo "    setup-iptables: reset the iptable entry added by this script"
+    exit 0
+fi
 
 setup_baremetal_interface
 setup_firewall

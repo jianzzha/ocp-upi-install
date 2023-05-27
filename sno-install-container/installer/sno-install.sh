@@ -91,5 +91,8 @@ export ipmi_password=$(yq -r .ipmi_password setup.conf.yaml)
 
 # generate host setup script
 envsubst < setup.tmpl > ../config/setup.sh
+
+# check the syntax
+bash -n ../config/setup.sh 
 chmod u+x ../config/setup.sh
 
