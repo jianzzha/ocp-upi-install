@@ -139,9 +139,24 @@ function download_rhcos_iso() {
 
 function setup_http_contents() {
     download_rhcos_iso
+    /bin/rm -rf htdocs/rhcos-live.x86_64.iso 2>/dev/null || true
     coreos-installer iso ignition embed -i ocp/bootstrap-in-place-for-live-iso.ign tmp/rhcos-live.x86_64.iso -o htdocs/rhcos-live.x86_64.iso
     chmod 0644 htdocs/bootstrap.ipxe
     chmod 0644 htdocs/rhcos-live.x86_64.iso
+}
+
+function update_etc_hosts() {
+    # first remove all duplicate host entries
+    cleanup_etc_hosts
+    cat hosts >> /etc/hosts
+}
+
+function cleanup_etc_hosts() {
+    # first remove all duplicate host entries
+    while read -r line; do
+        name=`echo ${DOLLAR}line | awk '{print ${DOLLAR}2}'`
+        sed -i "/${DOLLAR}name/d" /etc/hosts
+    done < hosts
 }
 
 function start_pxe_boot() {
@@ -177,6 +192,18 @@ if [[ ${1:-""} == "setup-iptables" ]]; then
     exit 0
 fi
 
+# command "add-hosts" will add entries to /etc/hosts
+if [[ ${1:-""} == "add-hosts" ]]; then
+    update_etc_hosts
+    exit 0
+fi
+
+# command "remove-hosts" will remove entries from /etc/hosts
+if [[ ${1:-""} == "remove-hosts" ]]; then
+    cleanup_etc_hosts
+    exit 0
+fi
+
 # command "help" is self explaining
 if [[ ${1:-""} == "help" ]]; then
     echo "Without a sub-command, $0 will install SNO from scratch"
@@ -185,6 +212,8 @@ if [[ ${1:-""} == "help" ]]; then
     echo "    clean: clean up the network and service containers"
     echo "    start-containers: re-start the service containers"
     echo "    setup-iptables: reset the iptable entry added by this script"
+    echo "    add-hosts: add SNO dns entries to /etc/hosts"
+    echo "    remove-hosts: delete SNO dns entries from /etc/hosts"
     exit 0
 fi
 
@@ -192,9 +221,8 @@ setup_baremetal_interface
 setup_firewall
 set_iptable_service
 install_openshift_client
-
+update_etc_hosts
 openshift-install --dir=ocp create single-node-ignition-config
-
 setup_dnsmasq
 setup_httpd
 setup_http_contents

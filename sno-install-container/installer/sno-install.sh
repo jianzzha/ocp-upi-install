@@ -32,6 +32,8 @@ if [[ "${1:-none}" == "pxe" ]]; then
     exit 0
 fi
 
+# use DOLLAR to escape vars from envsubst 
+export DOLLAR='$'
 export BM_IF=$(yq -r .baremetal_phy_int setup.conf.yaml)
 export BM_VLAN=$(yq -r .baremetal_vlan setup.conf.yaml)
 export http_port=$(yq -r '.http_port' setup.conf.yaml)
@@ -41,10 +43,24 @@ fi
 export default_route_interface=`get_default_route_interface`
 export pxe_mac=$(yq -r '.pxe_mac' setup.conf.yaml)
 export sno_name=$(yq -r '.sno_name' setup.conf.yaml)
+export sno_ip=$(yq -r '.sno_ip' setup.conf.yaml)
+if [[ -z "${sno_ip}" || "${sno_ip}" == "null" ]]; then
+    export sno_ip="192.168.222.30"
+fi
+export dhcp_low=$(yq -r '.dhcp_low' setup.conf.yaml)
+if [[ -z "${dhcp_low}" || "${dhcp_low}" == "null" ]]; then
+    export dhcp_low="192.168.222.20"
+fi
+export dhcp_high=$(yq -r '.dhcp_high' setup.conf.yaml)
+if [[ -z "${dhcp_high}" || "${dhcp_high}" == "null" ]]; then
+    export dhcp_high="192.168.222.100"
+fi
+
 /bin/rm -rf ../config/dnsmasq && mkdir ../config/dnsmasq
 envsubst < dnsmasq.tmpl > ../config/dnsmasq/dnsmasq.conf
 envsubst < ocp-iptables.tmpl > ../config/ocp-iptables.sh
 envsubst < iptables.service.tmpl > ../config/ocp-iptables.service 
+envsubst < host_file.tmpl > ../config/hosts
 
 export client_base_url=$(yq -r .client_base_url setup.conf.yaml)
 if [[ -z "${client_base_url}" || "${client_base_url}" == "none" ]]; then

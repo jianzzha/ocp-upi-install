@@ -9,11 +9,11 @@ except-interface=lo
 except-interface=${default_route_interface}
 interface=baremetal
 server=8.8.8.8
-dhcp-range=192.168.222.20,192.168.222.100
+dhcp-range=${dhcp_low},${dhcp_high}
 dhcp-no-override
 dhcp-authoritative
 dhcp-lease-max=41
-dhcp-host=${pxe_mac},192.168.222.30,${sno_name}
+dhcp-host=${pxe_mac},${sno_ip},${sno_name}
 
 dhcp-option=42,0.0.0.0
 enable-tftp
