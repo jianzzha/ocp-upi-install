@@ -233,6 +233,8 @@ if [[ "${skip_first_time_only_setup}" == "false" ]]; then
     fi
 
     /bin/cp -f install-config.yaml.tmpl install-config.yaml
+    pull_secret=$(run yq -r '.pull_secret' setup.conf.yaml)
+    sed -i -r -e "s/pullSecret: (.*)/pullSecret: \'${pull_secret}\'/" install-config.yaml
 
     http_proxy=$(yq -r '.http_proxy' setup.conf.yaml)
     no_proxy=$(yq -r '.no_proxy' setup.conf.yaml)
