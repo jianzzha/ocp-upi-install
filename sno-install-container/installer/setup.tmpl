@@ -1,0 +1,147 @@
+#!/usr/bin/bash
+set -euo pipefail
+shopt -s expand_aliases
+
+alias tool='podman run --rm \
+        -v /dev:/dev -v `pwd`:/data \
+        -w /data quay.io/jianzzha/toolset'
+
+alias coreos-installer='podman run --privileged --pull always --rm \
+        -v /dev:/dev -v /run/udev:/run/udev -v `pwd`:/data \
+        -w /data quay.io/coreos/coreos-installer:release'
+
+function setup_baremetal_interface() {
+    systemctl enable NetworkManager --now
+    nmcli con down baremetal 2>/dev/null || true
+    nmcli con del baremetal 2>/dev/null || true
+    nmcli con add type bridge ifname baremetal con-name baremetal ipv4.method manual ipv4.addr 192.168.222.1/24 ipv4.dns 192.168.222.1 ipv4.dns-priority 10 autoconnect yes bridge.stp no
+    nmcli con reload baremetal
+    nmcli con up baremetal
+    if [[ -n "${BM_IF}" && "${BM_IF}" != "null" ]]; then
+        if [[ -n "${BM_VLAN}" && "${BM_VLAN}" != "null" ]]; then
+            nmcli con down $BM_IF.$BM_VLAN 2>/dev/null || true
+            nmcli con del $BM_IF.$BM_VLAN 2>/dev/null || true
+            nmcli con add type vlan autoconnect yes con-name $BM_IF.$BM_VLAN ifname $BM_IF.$BM_VLAN dev $BM_IF id $BM_VLAN master baremetal slave-type bridge
+            nmcli con reload $BM_IF.$BM_VLAN
+            nmcli con up $BM_IF.$BM_VLAN
+        else
+            nmcli con down $BM_IF || true
+            nmcli con del $BM_IF || true
+            nmcli con add type bridge-slave autoconnect yes con-name $BM_IF ifname $BM_IF master baremetal
+            nmcli con reload $BM_IF
+            nmcli con up $BM_IF
+        fi
+    else
+        echo "baremetal_phy_int not specified!"
+        exit 1
+    fi
+}
+
+function setup_firewall() {
+    if firewall-cmd --state 2>/dev/null; then
+        firewall-cmd --permanent --add-service=dhcp --add-service=dns || true
+        firewall-cmd --permanent --add-port=${http_port}/tcp || true
+    fi
+}
+
+function set_iptable_service() {
+    # do nothing if an MASQUERADE entry exists
+    if iptables -t nat -L POSTROUTING | egrep "MASQUERADE.*anywhere.*anywhere"; then
+       echo "MASQUERADE entry already exists!"
+       return
+    fi
+    /bin/cp -f ocp-iptables.sh /usr/local/bin/ocp-iptables.sh
+    chmod u+x /usr/local/bin/ocp-iptables.sh
+    /bin/cp -f ocp-iptables.service /usr/local/lib/systemd/system/ocp-iptables.service
+    iptables -t nat -A POSTROUTING -s 192.168.222.0/24 ! -d 192.168.222.0/24 -o ${default_route_interface} -j MASQUERADE
+}
+
+function remove_dnsmasq() {
+    if podman container exists ocp-dnsmasq; then
+        podman rm -f ocp-dnsmasq
+    fi
+}
+
+function setup_dnsmasq() {
+    remove_dnsmasq
+    podman run -dit --name ocp-dnsmasq -v `pwd`/dnsmasq:/etc/dnsmasq.d --cap-add=NET_ADMIN --cap-add=NET_ADMIN \
+        --net=host quay.io/jianzzha/dnsmasq -d -q --conf-file=/etc/dnsmasq.d/dnsmasq.conf \
+        --enable-tftp --tftp-root=/var/lib/tftpboot --log-queries --log-dhcp
+}
+
+function remove_httpd() {
+    if podman container exists ocp-httpd; then
+        podman rm -f ocp-httpd
+    fi
+}
+
+function setup_httpd() {
+    remove_httpd
+    podman run -dit --name ocp-httpd -p ${http_port}:80 -v `pwd`/htdocs:/usr/local/apache2/htdocs/ docker.io/httpd:2.4
+}
+
+function install_openshift_installer() {
+    mkdir -p tmp
+    if [[ -f tmp/openshift-install-linux.tar.gz ]]; then
+        checksum=`sha256sum tmp/openshift-install-linux.tar.gz`
+        expected_checksum=`curl -sS ${client_base_url}/${client_version}/sha256sum.txt | grep -e openshift-install-linux.*gz | cut -d ' ' -f 1`
+        if [[ "${checksum}" == "${expected_checksum}" ]]; then
+            return
+        fi
+    fi
+    curl -L -o tmp/openshift-install-linux.tar.gz ${client_base_url}/${client_version}/openshift-install-linux.tar.gz
+    /bin/rm -rf /usr/local/bin/openshift-install
+    tar -C /usr/local/bin -xzf tmp/openshift-install-linux.tar.gz
+}
+
+function install_openshift_client() {
+    mkdir -p tmp
+    if [[ -f tmp/openshift-client-linux.tar.gz ]]; then
+        checksum=`sha256sum tmp/openshift-client-linux.tar.gz`
+        expected_checksum=`curl -sS ${client_base_url}/${client_version}/sha256sum.txt | grep -e openshift-client-linux.*gz | cut -d ' ' -f 1`
+        if [[ "${checksum}" == "${expected_checksum}" ]]; then
+            return
+        fi
+    fi
+    curl -L -o tmp/openshift-client-linux.tar.gz ${client_base_url}/${client_version}/openshift-client-linux.tar.gz
+    /bin/rm -rf /usr/local/bin/{kubectl,oc}
+    tar -C /usr/local/bin -xzf tmp/openshift-client-linux.tar.gz
+}
+
+function download_rhcos_iso() {
+    mkdir -p tmp
+    if [[ -f tmp/rhcos-live.x86_64.iso ]]; then
+        checksum=`sha256sum tmp/rhcos-live.x86_64.iso`
+        expected_checksum=`curl -sS ${rcos_iso_url}/sha256sum.txt | grep rhcos-live.x86_64.iso | cut -d ' ' -f 1`
+        if [[ "${checksum}" == "${expected_checksum}" ]]; then
+            return
+        fi
+    fi
+    curl -L -o tmp/rhcos-live.x86_64.iso "${rcos_iso_url}/rhcos-live.x86_64.iso"
+}
+
+function setup_http_contents() {
+    download_rhcos_iso
+    coreos-installer iso ignition embed -i ocp/bootstrap-in-place-for-live-iso.ign tmp/rhcos-live.x86_64.iso -o htdocs/rhcos-live.x86_64.iso
+    chmod 0644 htdocs/bootstrap.ipxe
+    chmod 0644 htdocs/rhcos-live.x86_64.iso
+}
+
+function start_pxe_boot() {
+    tool ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev pxe ${pxe_opt}
+    tool ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
+}
+
+setup_baremetal_interface
+setup_firewall
+set_iptable_service
+install_openshift_client
+
+openshift-install --dir=ocp create single-node-ignition-config
+
+setup_dnsmasq
+setup_httpd
+setup_http_contents
+start_pxe_boot
+openshift-install --dir=ocp wait-for install-complete
+
