@@ -168,44 +168,32 @@ function start_pxe_boot() {
 if [[ ${1:-""} == "pxe" ]]; then
     start_pxe_boot
     exit 0
-fi
-
+elif [[ ${1:-""} == "start-containers" ]]; then
 # after host reboots, all containers are down, use "start-containers" to bring them backup
-if [[ ${1:-""} == "start-containers" ]]; then
     setup_dnsmasq
     setup_httpd
     exit 0
-fi
-
+elif [[ ${1:-""} == "clean" ]]; then
 # command "clean" means remove containers and delete baremetal network
-if [[ ${1:-""} == "clean" ]]; then
     remove_httpd
     remove_dnsmasq
     cleanup_baremetal_interface
     cleanup_iptable_service
     exit 0
-fi
-
+elif [[ ${1:-""} == "setup-iptables" ]]; then
 # command "setup-iptables" will re-establish the iptable entry
-if [[ ${1:-""} == "setup-iptables" ]]; then
     set_iptable_service
     exit 0
-fi
-
+elif [[ ${1:-""} == "add-hosts" ]]; then
 # command "add-hosts" will add entries to /etc/hosts
-if [[ ${1:-""} == "add-hosts" ]]; then
     update_etc_hosts
     exit 0
-fi
-
+elif [[ ${1:-""} == "remove-hosts" ]]; then
 # command "remove-hosts" will remove entries from /etc/hosts
-if [[ ${1:-""} == "remove-hosts" ]]; then
     cleanup_etc_hosts
     exit 0
-fi
-
+elif [[ ${1:-""} == "help" ]]; then
 # command "help" is self explaining
-if [[ ${1:-""} == "help" ]]; then
     echo "Without a sub-command, $0 will install SNO from scratch"
     echo "Available sub-commands:"
     echo "    pxe: pxe boot the taget host" 
@@ -215,8 +203,12 @@ if [[ ${1:-""} == "help" ]]; then
     echo "    add-hosts: add SNO dns entries to /etc/hosts"
     echo "    remove-hosts: delete SNO dns entries from /etc/hosts"
     exit 0
+elif [[ ${1:-""} != "" ]]; then
+    echo "invalid sub-command!"
+    exit 1
 fi
 
+# without a sub-command means install from scratch
 setup_baremetal_interface
 setup_firewall
 set_iptable_service
