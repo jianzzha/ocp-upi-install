@@ -100,9 +100,8 @@ function setup_httpd() {
 function install_openshift_installer() {
     mkdir -p tmp
     if [[ -f tmp/openshift-install-linux.tar.gz ]]; then
-        checksum=`sha256sum tmp/openshift-install-linux.tar.gz`
         expected_checksum=`curl -sS ${client_base_url}/${client_version}/sha256sum.txt | grep -e openshift-install-linux.*gz | cut -d ' ' -f 1`
-        if [[ "${checksum}" == "${expected_checksum}" ]]; then
+        if echo "${DOLLAR}{expected_checksum} tmp/openshift-install-linux.tar.gz" | sha256sum --check --status; then
             return
         fi
     fi
@@ -114,9 +113,8 @@ function install_openshift_installer() {
 function install_openshift_client() {
     mkdir -p tmp
     if [[ -f tmp/openshift-client-linux.tar.gz ]]; then
-        checksum=`sha256sum tmp/openshift-client-linux.tar.gz`
         expected_checksum=`curl -sS ${client_base_url}/${client_version}/sha256sum.txt | grep -e openshift-client-linux.*gz | cut -d ' ' -f 1`
-        if [[ "${checksum}" == "${expected_checksum}" ]]; then
+        if echo "${DOLLAR}{expected_checksum} tmp/openshift-client-linux.tar.gz" | sha256sum --check --status; then
             return
         fi
     fi
@@ -128,9 +126,8 @@ function install_openshift_client() {
 function download_rhcos_iso() {
     mkdir -p tmp
     if [[ -f tmp/rhcos-live.x86_64.iso ]]; then
-        checksum=`sha256sum tmp/rhcos-live.x86_64.iso`
         expected_checksum=`curl -sS ${rcos_iso_url}/sha256sum.txt | grep rhcos-live.x86_64.iso | cut -d ' ' -f 1`
-        if [[ "${checksum}" == "${expected_checksum}" ]]; then
+        if echo "${DOLLAR}{expected_checksum} tmp/rhcos-live.x86_64.iso" | sha256sum --check --status; then
             return
         fi
     fi
@@ -141,8 +138,17 @@ function setup_http_contents() {
     download_rhcos_iso
     /bin/rm -rf htdocs/rhcos-live.x86_64.iso 2>/dev/null || true
     coreos-installer iso ignition embed -i ocp/bootstrap-in-place-for-live-iso.ign tmp/rhcos-live.x86_64.iso -o htdocs/rhcos-live.x86_64.iso
-    chmod 0644 htdocs/bootstrap.ipxe
-    chmod 0644 htdocs/rhcos-live.x86_64.iso
+    # The following is for kernel parameter POC
+    if [[ "${kargs_poc}" == "true" ]]; then
+        /bin/cp -f ocp/bootstrap-in-place-for-live-iso.ign htdocs/
+        rm -rf htdocs/{rhcos-live.x86_64-initrd.img,rhcos-live.x86_64-rootfs.img,rhcos-live.x86_64-vmlinuz}
+        rm -rf tmp/{rhcos-live.x86_64-initrd.img,rhcos-live.x86_64-rootfs.img,rhcos-live.x86_64-vmlinuz}
+        pushd tmp
+        coreos-installer iso extract pxe rhcos-live.x86_64.iso
+        popd
+        /bin/mv tmp/{rhcos-live.x86_64-initrd.img,rhcos-live.x86_64-rootfs.img,rhcos-live.x86_64-vmlinuz} htdocs/
+    fi
+    chmod 0644 htdocs/*
 }
 
 function update_etc_hosts() {
@@ -212,6 +218,7 @@ fi
 setup_baremetal_interface
 setup_firewall
 set_iptable_service
+install_openshift_installer
 install_openshift_client
 update_etc_hosts
 openshift-install --dir=ocp create single-node-ignition-config

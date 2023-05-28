@@ -96,6 +96,13 @@ export first_ipxe_interface=$(yq -r '.first_ipxe_interface' setup.conf.yaml)
 if [[ -z "${first_ipxe_interface}" || "${first_ipxe_interface}" == "null" ]]; then
     export first_ipxe_interface="net0"
 fi
+export kargs_poc=$(yq -r '.kargs_poc' setup.conf.yaml)
+if [[ -z "${kargs_poc}" || "${kargs_poc}" == "null" ]]; then
+    export kargs_poc="false"
+fi
+if [[ "${kargs_poc}" == "true" ]]; then
+    export POUND='#'
+fi
 /bin/rm -rf ../config/htdocs && mkdir ../config/htdocs
 envsubst < bootstrap.ipxe.tmpl > ../config/htdocs/bootstrap.ipxe 
 
