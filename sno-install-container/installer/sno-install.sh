@@ -63,7 +63,7 @@ envsubst < iptables.service.tmpl > ../config/ocp-iptables.service
 envsubst < host_file.tmpl > ../config/hosts
 
 export client_base_url=$(yq -r .client_base_url setup.conf.yaml)
-if [[ -z "${client_base_url}" || "${client_base_url}" == "none" ]]; then
+if [[ -z "${client_base_url}" || "${client_base_url}" == "null" ]]; then
     export client_base_url="https://mirror.openshift.com/pub/openshift-v4/clients/ocp"
 fi
 
@@ -92,6 +92,10 @@ envsubst < install-config.tmpl > install-config.yaml
 cp install-config.yaml ../config/ocp/
 
 # generate ipxe file
+export first_ipxe_interface=$(yq -r '.first_ipxe_interface' setup.conf.yaml)
+if [[ -z "${first_ipxe_interface}" || "${first_ipxe_interface}" == "null" ]]; then
+    export first_ipxe_interface="net0"
+fi
 /bin/rm -rf ../config/htdocs && mkdir ../config/htdocs
 envsubst < bootstrap.ipxe.tmpl > ../config/htdocs/bootstrap.ipxe 
 

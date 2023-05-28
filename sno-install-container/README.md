@@ -34,6 +34,9 @@ network_type: OVNKubernetes
 disk: /dev/sda
 #disk: /dev/nvme0n1
 
+# ipxe settings
+first_ipxe_interface: net4
+
 # dnsmasq settings
 pxe_mac: "f0:b2:b9:04:9b:60"
 sno_name: dut
