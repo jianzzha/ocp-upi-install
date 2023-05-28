@@ -1,0 +1,17 @@
+# TODO: this template is not supported yet
+[connection]
+id=${static_interface}
+type=802-3-ethernet
+interface-name=${static_interface}
+uuid=${uuid}
+autoconnect=true
+autoconnect-priority=1
+autoconnect-slaves=-1
+
+[ipv4]
+address0=${192.168.222.30/24}
+route0=0.0.0.0/0,${static_ipv4_gw}
+dns=${dns_server}
+method=manual
+route0_options=table=254
+
