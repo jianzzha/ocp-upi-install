@@ -100,7 +100,7 @@ function setup_httpd() {
 function install_openshift_installer() {
     mkdir -p tmp
     if [[ -f tmp/openshift-install-linux.tar.gz ]]; then
-        expected_checksum=`curl -sS ${client_base_url}/${client_version}/sha256sum.txt | grep -e openshift-install-linux.*gz | cut -d ' ' -f 1`
+        expected_checksum=`curl -sS ${client_base_url}/${client_version}/sha256sum.txt | grep -e openshift-install-linux-${client_version}.tar.gz | cut -d ' ' -f 1`
         if echo "${DOLLAR}{expected_checksum} tmp/openshift-install-linux.tar.gz" | sha256sum --check --status; then
             return
         fi
@@ -113,7 +113,7 @@ function install_openshift_installer() {
 function install_openshift_client() {
     mkdir -p tmp
     if [[ -f tmp/openshift-client-linux.tar.gz ]]; then
-        expected_checksum=`curl -sS ${client_base_url}/${client_version}/sha256sum.txt | grep -e openshift-client-linux.*gz | cut -d ' ' -f 1`
+        expected_checksum=`curl -sS ${client_base_url}/${client_version}/sha256sum.txt | grep -e openshift-client-linux-${client_version}.tar.gz | cut -d ' ' -f 1`
         if echo "${DOLLAR}{expected_checksum} tmp/openshift-client-linux.tar.gz" | sha256sum --check --status; then
             return
         fi
