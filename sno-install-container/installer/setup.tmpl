@@ -198,6 +198,9 @@ elif [[ ${1:-""} == "remove-hosts" ]]; then
 # command "remove-hosts" will remove entries from /etc/hosts
     cleanup_etc_hosts
     exit 0
+elif [[ ${1:-""} == "no-pxe" ]]; then
+# command "no-pxe" will prepare everything except pxe boot
+    no_pxe="true"
 elif [[ ${1:-""} == "help" ]]; then
 # command "help" is self explaining
     echo "Without a sub-command, $0 will install SNO from scratch"
@@ -208,6 +211,7 @@ elif [[ ${1:-""} == "help" ]]; then
     echo "    setup-iptables: reset the iptable entry added by this script"
     echo "    add-hosts: add SNO dns entries to /etc/hosts"
     echo "    remove-hosts: delete SNO dns entries from /etc/hosts"
+    echo "    no-pxe: prepare everything except pxe boot"
     exit 0
 elif [[ ${1:-""} != "" ]]; then
     echo "invalid sub-command!"
@@ -225,6 +229,9 @@ openshift-install --dir=ocp create single-node-ignition-config
 setup_dnsmasq
 setup_httpd
 setup_http_contents
+if [[ ${DOLLAR}{no_pxe:-"false"} == "true" ]]; then
+    exit 0
+fi
 start_pxe_boot
 openshift-install --dir=ocp wait-for install-complete
 
