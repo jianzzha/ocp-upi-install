@@ -79,8 +79,11 @@ fi
 export rcos_iso_url="${coreos_image_base_url}/${rhcos_major_rel}/${rhcos_minor_rel}"
 
 # generate install-config.yaml
-/bin/rm -rf ../config/ssh && mkdir ../config/ssh
-ssh-keygen -f ../config/ssh/id_rsa -q -N ""
+mkdir -p ../config/ssh
+if [[ ! -e ../config/ssh/id_rsa || ! -e ../config/ssh/id_rsa.pub ]]; then
+    /bin/rm -rf ../config/ssh/*
+    ssh-keygen -f ../config/ssh/id_rsa -q -N ""
+fi
 export pub_key_content=`cat ../config/ssh/id_rsa.pub`
 export pull_secret=\'$(yq -r '.pull_secret' setup.conf.yaml)\'
 export network_type=$(yq -r '.network_type' setup.conf.yaml)
