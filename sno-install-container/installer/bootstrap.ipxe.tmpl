@@ -7,5 +7,5 @@ ${POUND}sanboot --no-describe http://192.168.222.1:${http_port}/rhcos-live.x86_6
 # kernel parameter POC
 # https://github.com/openshift/openshift-docs/blob/main/modules/installation-user-infra-machines-pxe.adoc
 initrd --name main http://192.168.222.1:${http_port}/rhcos-live.x86_64-initrd.img
-kernel http://192.168.222.1:${http_port}/rhcos-live.x86_64-vmlinuz initrd=main coreos.live.rootfs_url=http://192.168.222.1:${http_port}/rhcos-live.x86_64-rootfs.img coreos.inst.install_dev=${disk} coreos.inst.ignition_url=http://192.168.222.1:${http_port}/bootstrap-in-place-for-live-iso.ign
+kernel http://192.168.222.1:${http_port}/rhcos-live.x86_64-vmlinuz initrd=main coreos.live.rootfs_url=http://192.168.222.1:${http_port}/rhcos-live.x86_64-rootfs.img coreos.inst.install_dev=${disk} coreos.inst.ignition_url=http://192.168.222.1:${http_port}/bootstrap-in-place-for-live-iso.ign ignition.firstboot=1 ignition.platform.id=metal console=ttyS0 console=tty0
 boot || shell
