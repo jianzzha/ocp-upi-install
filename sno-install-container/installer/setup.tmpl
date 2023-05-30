@@ -10,6 +10,11 @@ alias coreos-installer='podman run --privileged --pull always --rm \
         -v /dev:/dev -v /run/udev:/run/udev -v `pwd`:/data \
         -w /data quay.io/coreos/coreos-installer:release'
 
+alias butane='podman run --rm --interactive       \
+              --security-opt label=disable        \
+              --volume `pwd`:/pwd --workdir /pwd \
+              quay.io/coreos/butane:release'
+
 function setup_baremetal_interface() {
     systemctl enable NetworkManager --now
     mtu=`cat /sys/class/net/${BM_IF}/mtu`
@@ -136,13 +141,17 @@ function download_rhcos_iso() {
     curl -L -o tmp/rhcos-live.x86_64.iso "${rcos_iso_url}/rhcos-live.x86_64.iso"
 }
 
+function generate_ssh_ign() {
+    butane --pretty --strict ocp/ssh.bu > ocp/ssh.ign
+}
+ 
 function setup_http_contents() {
+    # ${DOLLAR}1: bootstrap-in-place-for-live-iso.ign, ssh.ign
     download_rhcos_iso
     /bin/rm -rf htdocs/rhcos-live.x86_64.iso 2>/dev/null || true
-    coreos-installer iso ignition embed -i ocp/bootstrap-in-place-for-live-iso.ign tmp/rhcos-live.x86_64.iso -o htdocs/rhcos-live.x86_64.iso
+    coreos-installer iso ignition embed -i ocp/${DOLLAR}1 tmp/rhcos-live.x86_64.iso -o htdocs/rhcos-live.x86_64.iso
     mkdir -p /mnt/iso
     umount /mnt/iso 2>/dev/null || true
-    /bin/cp -f ocp/bootstrap-in-place-for-live-iso.ign htdocs/
     rm -rf htdocs/{rhcos-live.x86_64-initrd.img,rhcos-live.x86_64-rootfs.img,rhcos-live.x86_64-vmlinuz}
     rm -rf tmp/{rhcos-live.x86_64-initrd.img,rhcos-live.x86_64-rootfs.img,rhcos-live.x86_64-vmlinuz}
     pushd tmp
@@ -152,6 +161,27 @@ function setup_http_contents() {
     mount -o loop htdocs/rhcos-live.x86_64.iso /mnt/iso
     /bin/cp -f /mnt/iso/images/ignition.img htdocs/
     chmod 0644 htdocs/*
+}
+
+function prepare_live() {
+    generate_ssh_ign
+    setup_http_contents ssh.ign
+}
+
+function wipe_disk() {
+    target=${DOLLAR}{1:-"all"}
+    # test if ssh server ready
+    while ! nc -zvw10 ${sno_ip} 22; do
+        sleep 5
+    done
+    if [[ ${DOLLAR}{target} != "all" ]]; then
+        ssh -i ssh/id_rsa -o StrictHostKeyChecking=no core@${sno_ip} sudo sgdisk -Z /dev/${DOLLAR}{target}
+        return
+    fi
+    disks=`ssh -i ssh/id_rsa -o StrictHostKeyChecking=no core@${sno_ip} sudo lsblk -l | grep disk | cut -d' ' -f 1`
+    for disk in ${DOLLAR}{disks}; do
+        ssh -i ssh/id_rsa -o StrictHostKeyChecking=no core@${sno_ip} sudo sgdisk -Z /dev/${DOLLAR}{disk}
+    done
 }
 
 function update_etc_hosts() {
@@ -170,7 +200,27 @@ function cleanup_etc_hosts() {
 
 function start_pxe_boot() {
     tool ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev pxe ${pxe_opt}
-    tool ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
+    tool ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle || \
+    tool ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power on
+
+}
+
+function cleanup_vm() {
+    virsh destroy ${sno_name} 2>/dev/null || true
+    virsh undefine ${sno_name} 2>/dev/null || true 
+    virsh vol-delete ${sno_name}.qcow2 --pool default 2>/dev/null || true
+}
+
+function start_vm() {
+    cleanup_vm 
+    virt-install -n ${sno_name} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network bridge=baremetal,mac=${pxe_mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough
+    while true; do
+        sleep 3
+        if ! virsh domstate ${sno_name} | grep running; then
+            virsh start ${sno_name}
+            break
+        fi
+    done
 }
 
 # if containers are still up, to re-deploy sno, "pxe" command will do
@@ -184,6 +234,7 @@ elif [[ ${1:-""} == "start-containers" ]]; then
     exit 0
 elif [[ ${1:-""} == "clean" ]]; then
 # command "clean" means remove containers and delete baremetal network
+    cleanup_vm
     remove_httpd
     remove_dnsmasq
     cleanup_baremetal_interface
@@ -204,6 +255,12 @@ elif [[ ${1:-""} == "remove-hosts" ]]; then
 elif [[ ${1:-""} == "no-pxe" ]]; then
 # command "no-pxe" will prepare everything except pxe boot
     no_pxe="true"
+elif [[ ${1:-""} == "live" ]]; then
+    live="true"
+elif [[ ${1:-""} == "wipe-first" ]]; then
+    wipe_first="true"
+elif [[ ${1:-""} == "vm" ]]; then
+    use_vm="true"
 elif [[ ${1:-""} == "help" ]]; then
 # command "help" is self explaining
     echo "Without a sub-command, $0 will install SNO from scratch"
@@ -215,6 +272,9 @@ elif [[ ${1:-""} == "help" ]]; then
     echo "    add-hosts: add SNO dns entries to /etc/hosts"
     echo "    remove-hosts: delete SNO dns entries from /etc/hosts"
     echo "    no-pxe: prepare everything except pxe boot"
+    echo "    live: prepare live boot for ssh, user prepare a server to boot"
+    echo "    wipe-first [sda]: wipe a disk(or all disks) before OCP install"
+    echo "    vm: use a virtual machine for the ocp install"
     exit 0
 elif [[ ${1:-""} != "" ]]; then
     echo "invalid sub-command!"
@@ -231,10 +291,25 @@ update_etc_hosts
 openshift-install --dir=ocp create single-node-ignition-config
 setup_dnsmasq
 setup_httpd
-setup_http_contents
+if [[ ${DOLLAR}{live:-"false"} == "true" ]]; then
+    prepare_live
+    exit 0
+fi
+if [[ ${DOLLAR}{wipe_first:-"false"} == "true" ]]; then
+    prepare_live
+    start_pxe_boot
+    # sleep some time to make sure pxe has started
+    sleep 10
+    wipe_disk ${DOLLAR}{2:-""}
+fi 
+setup_http_contents bootstrap-in-place-for-live-iso.ign
 if [[ ${DOLLAR}{no_pxe:-"false"} == "true" ]]; then
     exit 0
 fi
-start_pxe_boot
+if [[ ${DOLLAR}{use_vm:-"false"} == "true" ]]; then
+    start_vm
+else   
+    start_pxe_boot
+fi
 openshift-install --dir=ocp wait-for install-complete
 

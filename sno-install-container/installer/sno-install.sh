@@ -95,6 +95,7 @@ envsubst < install-config.tmpl > install-config.yaml
 # create sno ignition
 /bin/rm -rf ../config/ocp && mkdir ../config/ocp
 cp install-config.yaml ../config/ocp/
+envsubst < ssh.bu.tmpl > ../config/ocp/ssh.bu
 
 # generate ipxe file
 export first_ipxe_interface=$(yq -r '.first_ipxe_interface' setup.conf.yaml)
@@ -113,6 +114,10 @@ fi
 export ipmi_addr=$(yq -r .ipmi_addr setup.conf.yaml)
 export ipmi_user=$(yq -r .ipmi_user setup.conf.yaml)
 export ipmi_password=$(yq -r .ipmi_password setup.conf.yaml)
+
+# generate vm domain xml
+# this is not being used - live boot should not allow the VM auto-restart at reboot, or it will end up in install loop
+envsubst < vm.xml.tmpl > ../config/vm.xml
 
 # generate host setup script
 envsubst < setup.tmpl > ../config/setup.sh
