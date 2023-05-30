@@ -12,9 +12,11 @@ alias coreos-installer='podman run --privileged --pull always --rm \
 
 function setup_baremetal_interface() {
     systemctl enable NetworkManager --now
+    mtu=`cat /sys/class/net/${BM_IF}/mtu`
     nmcli con down baremetal 2>/dev/null || true
     nmcli con del baremetal 2>/dev/null || true
     nmcli con add type bridge ifname baremetal con-name baremetal ipv4.method manual ipv4.addr 192.168.222.1/24 ipv4.dns 192.168.222.1 ipv4.dns-priority 10 autoconnect yes bridge.stp no
+    nmcli con modify baremetal 802-3-ethernet.mtu ${DOLLAR}((mtu-4))
     nmcli con reload baremetal
     nmcli con up baremetal
     if [[ -n "${BM_IF}" && "${BM_IF}" != "null" ]]; then
