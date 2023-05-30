@@ -17,7 +17,6 @@ disk: /dev/sda
 
 # ipxe settings
 first_ipxe_interface: net4
-kargs_poc: false
 
 # dnsmasq settings
 pxe_mac: "f0:b2:b9:04:9b:60"

@@ -140,16 +140,17 @@ function setup_http_contents() {
     download_rhcos_iso
     /bin/rm -rf htdocs/rhcos-live.x86_64.iso 2>/dev/null || true
     coreos-installer iso ignition embed -i ocp/bootstrap-in-place-for-live-iso.ign tmp/rhcos-live.x86_64.iso -o htdocs/rhcos-live.x86_64.iso
-    # The following is for kernel parameter POC
-    if [[ "${kargs_poc}" == "true" ]]; then
-        /bin/cp -f ocp/bootstrap-in-place-for-live-iso.ign htdocs/
-        rm -rf htdocs/{rhcos-live.x86_64-initrd.img,rhcos-live.x86_64-rootfs.img,rhcos-live.x86_64-vmlinuz}
-        rm -rf tmp/{rhcos-live.x86_64-initrd.img,rhcos-live.x86_64-rootfs.img,rhcos-live.x86_64-vmlinuz}
-        pushd tmp
-        coreos-installer iso extract pxe rhcos-live.x86_64.iso
-        popd
-        /bin/mv tmp/{rhcos-live.x86_64-initrd.img,rhcos-live.x86_64-rootfs.img,rhcos-live.x86_64-vmlinuz} htdocs/
-    fi
+    mkdir -p /mnt/iso
+    umount /mnt/iso 2>/dev/null || true
+    /bin/cp -f ocp/bootstrap-in-place-for-live-iso.ign htdocs/
+    rm -rf htdocs/{rhcos-live.x86_64-initrd.img,rhcos-live.x86_64-rootfs.img,rhcos-live.x86_64-vmlinuz}
+    rm -rf tmp/{rhcos-live.x86_64-initrd.img,rhcos-live.x86_64-rootfs.img,rhcos-live.x86_64-vmlinuz}
+    pushd tmp
+    coreos-installer iso extract pxe rhcos-live.x86_64.iso
+    popd
+    /bin/mv tmp/{rhcos-live.x86_64-initrd.img,rhcos-live.x86_64-rootfs.img,rhcos-live.x86_64-vmlinuz} htdocs/
+    mount -o loop htdocs/rhcos-live.x86_64.iso /mnt/iso
+    /bin/cp -f /mnt/iso/images/ignition.img htdocs/
     chmod 0644 htdocs/*
 }
 

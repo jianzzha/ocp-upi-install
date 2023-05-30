@@ -34,6 +34,7 @@ fi
 
 # use DOLLAR to escape vars from envsubst 
 export DOLLAR='$'
+export POUND='#'
 export BM_IF=$(yq -r .baremetal_phy_int setup.conf.yaml)
 export BM_VLAN=$(yq -r .baremetal_vlan setup.conf.yaml)
 export http_port=$(yq -r '.http_port' setup.conf.yaml)
@@ -69,8 +70,9 @@ fi
 
 export client_version=$(yq -r .client_version setup.conf.yaml)
 
-rhcos_major_rel=$(yq -r '.rhcos_major_rel' setup.conf.yaml)
-rhcos_minor_rel=$(yq -r '.rhcos_minor_rel' setup.conf.yaml)
+rhcos_version=$(yq -r '.rhcos_version' setup.conf.yaml)
+rhcos_major_rel=`echo ${rhcos_version} | awk -F. '{print $1"."$2}'`
+rhcos_minor_rel=${rhcos_version}
 
 coreos_image_base_url=$(yq -r '.coreos_image_base_url' setup.conf.yaml)
 if [[ -z "${coreos_image_base_url}" ]]; then
@@ -98,13 +100,6 @@ cp install-config.yaml ../config/ocp/
 export first_ipxe_interface=$(yq -r '.first_ipxe_interface' setup.conf.yaml)
 if [[ -z "${first_ipxe_interface}" || "${first_ipxe_interface}" == "null" ]]; then
     export first_ipxe_interface="net0"
-fi
-export kargs_poc=$(yq -r '.kargs_poc' setup.conf.yaml)
-if [[ -z "${kargs_poc}" || "${kargs_poc}" == "null" ]]; then
-    export kargs_poc="false"
-fi
-if [[ "${kargs_poc}" == "true" ]]; then
-    export POUND='#'
 fi
 /bin/rm -rf ../config/htdocs && mkdir ../config/htdocs
 envsubst < bootstrap.ipxe.tmpl > ../config/htdocs/bootstrap.ipxe 
