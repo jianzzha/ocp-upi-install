@@ -1,3 +1,7 @@
+# Single Node Cluster Install
+
+For single node cluster install, user should use the containerized installer [a relative link](sno-install-container/README.md)
+
 # ocp-upi-install
 
 Verified installation host: rhel7.7; rhel 8 should work as well but not verified.
