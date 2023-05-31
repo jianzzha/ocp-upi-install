@@ -1,6 +1,6 @@
 # Single Node Cluster Install
 
-For single node cluster install, user should use the containerized installer [a relative link](sno-install-container/README.md)
+For single node cluster install, user should use [the containerized installer](sno-install-container/README.md)
 
 # ocp-upi-install
 
