@@ -56,6 +56,10 @@ export dhcp_high=$(yq -r '.dhcp_high' setup.conf.yaml)
 if [[ -z "${dhcp_high}" || "${dhcp_high}" == "null" ]]; then
     export dhcp_high="192.168.222.100"
 fi
+export base_domain=$(yq -r '.base_domain' setup.conf.yaml)
+if [[ -z "${base_domain}" || "${base_domain}" == "null" ]]; then
+    export base_domain="myocp4.com"
+fi
 
 /bin/rm -rf ../config/dnsmasq && mkdir ../config/dnsmasq
 envsubst < dnsmasq.tmpl > ../config/dnsmasq/dnsmasq.conf

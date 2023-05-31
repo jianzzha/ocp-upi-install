@@ -2,8 +2,8 @@
 listen-address=192.168.222.1
 bind-interfaces
 strict-order
-local=/test.myocp4.com/
-domain=test.myocp4.com
+local=/${sno_name}.${base_domain}/
+domain=${sno_name}.${base_domain}
 expand-hosts
 except-interface=lo
 except-interface=${default_route_interface}
@@ -13,6 +13,7 @@ dhcp-range=${dhcp_low},${dhcp_high}
 dhcp-no-override
 dhcp-authoritative
 dhcp-lease-max=41
+# anchor_host_entry
 dhcp-host=${pxe_mac},${sno_ip},${sno_name}
 
 dhcp-option=42,0.0.0.0
@@ -26,6 +27,7 @@ dhcp-boot=tag:BIOS,undionly.kpxe
 dhcp-boot=tag:efi64,ipxe.efi
 dhcp-boot=tag:ipxe,http://192.168.222.1:${http_port}/bootstrap.ipxe
 
-address=/api.test.myocp4.com/192.168.222.30
-address=/api-int.test.myocp4.com/192.168.222.30
-address=/.apps.test.myocp4.com/192.168.222.30
+# anchor_service_entry
+address=/api.${sno_name}.${base_domain}/${sno_ip}
+address=/api-int.${sno_name}.${base_domain}/${sno_ip}
+address=/.apps.${sno_name}.${base_domain}/${sno_ip}
