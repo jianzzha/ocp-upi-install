@@ -65,6 +65,26 @@ cd config
 ./setup.sh
 ```
 
+To install on a virtual machine on the local host in stead,
+```
+./setup.sh vm
+```
+
+To wipe out all disks on the target server before install,
+```
+./setup.sh wipe-first
+```
+
+To wipe out `sda` on the target server before install,
+```
+./setup.sh wipe-first sda
+```
+
+To debug coreos image install problem, prepare the live boot enviroment (then followed by manual booting the target and ssh -i ssh/id_rsa core@<targeti ip>),
+```
+./setup.sh live
+```
+
 ## Cleanup
 
 Use `clean` sub-command to remove what's installed by the `setup.sh` script,
