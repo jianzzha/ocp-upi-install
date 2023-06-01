@@ -105,60 +105,21 @@ function setup_httpd() {
 }
 
 function install_openshift_installer() {
-    mkdir -p tmp
-    if [[ -f tmp/openshift-install-linux.tar.gz ]]; then
-        expected_checksum=`curl -sS ${client_base_url}/${client_version}/sha256sum.txt | grep -e openshift-install-linux-${client_version}.tar.gz | cut -d ' ' -f 1`
-        if echo "${DOLLAR}{expected_checksum} tmp/openshift-install-linux.tar.gz" | sha256sum --check --status; then
-            return
-        fi
+    if [[ ! -f tmp/openshift-install-linux.tar.gz ]]; then
+        echo "tmp/openshift-install-linux.tar.gz not present!"
+        exit 1
     fi
-    curl -L -o tmp/openshift-install-linux.tar.gz ${client_base_url}/${client_version}/openshift-install-linux.tar.gz
     /bin/rm -rf /usr/local/bin/openshift-install
     tar -C /usr/local/bin -xzf tmp/openshift-install-linux.tar.gz
 }
 
 function install_openshift_client() {
-    mkdir -p tmp
-    if [[ -f tmp/openshift-client-linux.tar.gz ]]; then
-        expected_checksum=`curl -sS ${client_base_url}/${client_version}/sha256sum.txt | grep -e openshift-client-linux-${client_version}.tar.gz | cut -d ' ' -f 1`
-        if echo "${DOLLAR}{expected_checksum} tmp/openshift-client-linux.tar.gz" | sha256sum --check --status; then
-            return
-        fi
-    fi
-    curl -L -o tmp/openshift-client-linux.tar.gz ${client_base_url}/${client_version}/openshift-client-linux.tar.gz
-    /bin/rm -rf /usr/local/bin/{kubectl,oc}
-    tar -C /usr/local/bin -xzf tmp/openshift-client-linux.tar.gz
-}
-
-function download_rhcos_iso_via_ocp() {
-    if ! command -v jq >/dev/null 2>&1; then
-        "jq not installed!"
+    if [[ ! -f tmp/openshift-client-linux.tar.gz ]]; then
+        echo "tmp/openshift-client-linux.tar.gz not present!"
         exit 1
     fi
-    expected_checksum=`openshift-install coreos print-stream-json | jq -r '.architectures.x86_64.artifacts.metal.formats.iso.disk.sha256'`
-    if [[ -f tmp/rhcos-live.x86_64.iso ]]; then
-        if echo "${DOLLAR}{expected_checksum} tmp/rhcos-live.x86_64.iso" | sha256sum --check --status; then
-            return
-        fi
-    fi
-    url=`openshift-install coreos print-stream-json | jq -r '.architectures.x86_64.artifacts.metal.formats.iso.disk.location'`
-    curl -L -o tmp/rhcos-live.x86_64.iso "${DOLLAR}{url}"
-}
-
-function download_rhcos_iso() {
-    mkdir -p tmp
-    if [[ "${rcos_iso_url}" == "null" ]]; then
-        # download url is not provided, get it via openshift-installer
-        download_rhcos_iso_via_ocp
-        return
-    fi
-    if [[ -f tmp/rhcos-live.x86_64.iso ]]; then
-        expected_checksum=`curl -sS ${rcos_iso_url}/sha256sum.txt | grep rhcos-live.x86_64.iso | cut -d ' ' -f 1`
-        if echo "${DOLLAR}{expected_checksum} tmp/rhcos-live.x86_64.iso" | sha256sum --check --status; then
-            return
-        fi
-    fi
-    curl -L -o tmp/rhcos-live.x86_64.iso "${rcos_iso_url}/rhcos-live.x86_64.iso"
+    /bin/rm -rf /usr/local/bin/{kubectl,oc}
+    tar -C /usr/local/bin -xzf tmp/openshift-client-linux.tar.gz
 }
 
 function generate_ssh_ign() {
@@ -167,7 +128,10 @@ function generate_ssh_ign() {
  
 function setup_http_contents() {
     # ${DOLLAR}1: bootstrap-in-place-for-live-iso.ign, ssh.ign
-    download_rhcos_iso
+    if [[ ! -f tmp/rhcos-live.x86_64.iso ]]; then
+        echo "tmp/rhcos-live.x86_64.iso not present!"
+        exit 1
+    fi
     /bin/rm -rf htdocs/rhcos-live.x86_64.iso 2>/dev/null || true
     coreos-installer iso ignition embed -i ocp/${DOLLAR}1 tmp/rhcos-live.x86_64.iso -o htdocs/rhcos-live.x86_64.iso
     mkdir -p /mnt/iso
@@ -181,6 +145,7 @@ function setup_http_contents() {
     mount -o loop htdocs/rhcos-live.x86_64.iso /mnt/iso
     /bin/cp -f /mnt/iso/images/ignition.img htdocs/
     chmod 0644 htdocs/*
+    umount /mnt/iso 2>/dev/null || true
 }
 
 function prepare_live() {
@@ -222,16 +187,23 @@ function start_pxe_boot() {
     tool ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis bootdev pxe ${pxe_opt}
     tool ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle || \
     tool ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power on
-
 }
 
 function cleanup_vm() {
+    if ! command -v virsh >/dev/null 2>&1; then
+        echo "virsh not installed!"
+        exit 1
+    fi
     virsh destroy ${sno_name} 2>/dev/null || true
     virsh undefine ${sno_name} 2>/dev/null || true 
     virsh vol-delete ${sno_name}.qcow2 --pool default 2>/dev/null || true
 }
 
 function start_vm() {
+    if ! command -v virt-install >/dev/null 2>&1; then
+        echo "virt-install not installed!"
+        exit 1
+    fi
     cleanup_vm 
     virt-install -n ${sno_name} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=16384 --vcpus=4 --network bridge=baremetal,mac=${pxe_mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough
     while true; do
@@ -241,6 +213,17 @@ function start_vm() {
             break
         fi
     done
+}
+
+function until_first_boot_complete() {
+if ! command -v nc >/dev/null 2>&1; then
+    echo "nc command not available, sleep 10 minutes in stead ..."
+    sleep 10m
+else
+    while ! nc -zvw10 ${sno_ip} 6443; do
+        sleep 5
+    done
+fi
 }
 
 # if containers are still up, to re-deploy sno, "pxe" command will do
@@ -308,7 +291,6 @@ set_iptable_service
 install_openshift_installer
 install_openshift_client
 update_etc_hosts
-openshift-install --dir=ocp create single-node-ignition-config
 setup_dnsmasq
 setup_httpd
 if [[ ${DOLLAR}{live:-"false"} == "true" ]]; then
@@ -331,5 +313,6 @@ if [[ ${DOLLAR}{use_vm:-"false"} == "true" ]]; then
 else   
     start_pxe_boot
 fi
+until_first_boot_complete
 openshift-install --dir=ocp wait-for install-complete
 

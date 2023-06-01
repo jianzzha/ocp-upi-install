@@ -27,6 +27,55 @@ function start_pxe_boot() {
     ipmitool -I lanplus -H ${ipmi_addr} -U ${ipmi_user} -P ${ipmi_password} chassis power cycle
 }
 
+function install_openshift_installer() {
+    mkdir -p ../config/tmp
+    update="true"
+    if [[ -f ../config/tmp/openshift-install-linux.tar.gz ]]; then
+        expected_checksum=`curl -sS ${client_base_url}/${client_version}/sha256sum.txt | grep -e openshift-install-linux-${client_version}.tar.gz | cut -d ' ' -f 1`
+        if echo "${expected_checksum} ../config/tmp/openshift-install-linux.tar.gz" | sha256sum --check --status; then
+            update="false"
+        fi
+    fi
+    if [[ "${update}" == "true" ]]; then
+        curl -L -o ../config/tmp/openshift-install-linux.tar.gz ${client_base_url}/${client_version}/openshift-install-linux.tar.gz
+    fi
+    tar -C /usr/bin -xzf ../config/tmp/openshift-install-linux.tar.gz && chmod u+x /usr/bin/openshift-install
+}
+
+function download_openshift_client() {
+    mkdir -p ../config/tmp
+    if [[ -f ../config/tmp/openshift-client-linux.tar.gz ]]; then
+        expected_checksum=`curl -sS ${client_base_url}/${client_version}/sha256sum.txt | grep -e openshift-client-linux-${client_version}.tar.gz | cut -d ' ' -f 1`
+        if echo "${expected_checksum} ../config/tmp/openshift-client-linux.tar.gz" | sha256sum --check --status; then
+            return
+        fi
+    fi
+    curl -L -o ../config/tmp/openshift-client-linux.tar.gz ${client_base_url}/${client_version}/openshift-client-linux.tar.gz
+}
+
+function download_rhcos_iso_via_openshift_install() {
+    mkdir -p ../config/tmp
+    expected_checksum=`/usr/bin/openshift-install coreos print-stream-json | jq -r '.architectures.x86_64.artifacts.metal.formats.iso.disk.sha256'`
+    if [[ -f ../config/tmp/rhcos-live.x86_64.iso ]]; then
+        if echo "${expected_checksum} ../config/tmp/rhcos-live.x86_64.iso" | sha256sum --check --status; then
+            return
+        fi
+    fi
+    url=`/usr/bin/openshift-install coreos print-stream-json | jq -r '.architectures.x86_64.artifacts.metal.formats.iso.disk.location'`
+    curl -L -o ../config/tmp/rhcos-live.x86_64.iso ${url}
+}
+
+function download_rhcos_iso() {
+    mkdir -p ../config/tmp
+    if [[ -f ../config/tmp/rhcos-live.x86_64.iso ]]; then
+        expected_checksum=`curl -sS ${rcos_iso_url}/sha256sum.txt | grep rhcos-live.x86_64.iso | cut -d ' ' -f 1`
+        if echo "${expected_checksum} ../config/tmp/rhcos-live.x86_64.iso" | sha256sum --check --status; then
+            return
+        fi
+    fi
+    curl -L -o ../config/tmp/rhcos-live.x86_64.iso "${rcos_iso_url}/rhcos-live.x86_64.iso"
+}
+
 if [[ "${1:-none}" == "pxe" ]]; then
     start_pxe_boot
     exit 0
@@ -74,9 +123,12 @@ fi
 
 export client_version=$(yq -r .client_version setup.conf.yaml)
 
+install_openshift_installer
+download_openshift_client
+
 rhcos_version=$(yq -r '.rhcos_version' setup.conf.yaml)
 if [[ -z ${rhcos_version} || "${rhcos_version}" == "null" ]]; then
-    export rcos_iso_url="null"
+    download_rhcos_iso_via_openshift_install
 else
     rhcos_major_rel=`echo ${rhcos_version} | awk -F. '{print $1"."$2}'`
     rhcos_minor_rel=${rhcos_version}
@@ -85,7 +137,9 @@ else
         coreos_image_base_url="https://mirror.openshift.com/pub/openshift-v4/x86_64/dependencies/rhcos"
     fi
     export rcos_iso_url="${coreos_image_base_url}/${rhcos_major_rel}/${rhcos_minor_rel}"
+    download_rhcos_iso
 fi
+
 # generate install-config.yaml
 mkdir -p ../config/ssh
 if [[ ! -e ../config/ssh/id_rsa || ! -e ../config/ssh/id_rsa.pub ]]; then
@@ -101,6 +155,8 @@ envsubst < install-config.tmpl > install-config.yaml
 # create sno ignition
 /bin/rm -rf ../config/ocp && mkdir ../config/ocp
 cp install-config.yaml ../config/ocp/
+openshift-install --dir=../config/ocp create single-node-ignition-config
+
 envsubst < ssh.bu.tmpl > ../config/ocp/ssh.bu
 
 # generate ipxe file
@@ -120,10 +176,6 @@ fi
 export ipmi_addr=$(yq -r .ipmi_addr setup.conf.yaml)
 export ipmi_user=$(yq -r .ipmi_user setup.conf.yaml)
 export ipmi_password=$(yq -r .ipmi_password setup.conf.yaml)
-
-# generate vm domain xml
-# this is not being used - live boot should not allow the VM auto-restart at reboot, or it will end up in install loop
-envsubst < vm.xml.tmpl > ../config/vm.xml
 
 # generate host setup script
 envsubst < setup.tmpl > ../config/setup.sh
