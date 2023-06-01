@@ -152,6 +152,14 @@ export network_type=$(yq -r '.network_type' setup.conf.yaml)
 export disk=$(yq -r '.disk' setup.conf.yaml)
 envsubst < install-config.tmpl > install-config.yaml
 
+# insert http proxy info
+http_proxy=$(yq -r '.http_proxy' setup.conf.yaml)
+no_proxy_extra=$(yq -r '.no_proxy' setup.conf.yaml)
+no_proxy="${sno_name}.${base_domain},127.0.0.1,localhost,${no_proxy_extra}"
+if [[ -n "${http_proxy/null/}" ]]; then
+    sed -i "/^baseDomain:.*/a proxy:\n  httpProxy: \"${http_proxy}\"\n  httpsProxy: \"${http_proxy}\"\n  noProxy: \"${no_proxy}\"" install-config.yaml
+fi
+
 # create sno ignition
 /bin/rm -rf ../config/ocp && mkdir ../config/ocp
 cp install-config.yaml ../config/ocp/

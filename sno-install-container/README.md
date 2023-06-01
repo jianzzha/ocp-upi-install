@@ -33,6 +33,9 @@ http_port: 10080
 network_type: OVNKubernetes
 disk: /dev/sda
 #disk: /dev/nvme0n1
+#http_proxy: "http://<your_proxy_ip>:<your_proxy_port>
+# OCP has a default no_proxy list which normally works, this no_proxy setting is an extra list
+i#no_proxy: "192.168.222.0/24"
 
 # ipxe settings
 first_ipxe_interface: net4
@@ -69,6 +72,13 @@ cd config
 To install on a virtual machine on the local host in stead,
 ```
 ./setup.sh vm
+```
+
+On RHEL, running virtual machine requires the following yum packages pre-installed,
+```
+sudo dnf group install 'Virtualization Hypervisor' 
+sudo dnf install virt-install
+sudo systemctl enable libvirtd --now
 ```
 
 To wipe out all disks on the target server before install,
