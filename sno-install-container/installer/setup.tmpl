@@ -75,7 +75,7 @@ function cleanup_iptable_service() {
     /bin/rm -rf /usr/local/lib/systemd/system/ocp-iptables.service || true
     /bin/rm -rf /usr/local/bin/ocp-iptables.sh || true
     while iptables -C POSTROUTING -t nat -s 192.168.222.0/24 ! -d 192.168.222.0/24 \
-                   -o ${default_route_interface} -j MASQUERADE 2>/dev/null; do 
+                   -o ${default_route_interface} -j MASQUERADE 2>/dev/null; do
         iptables -D POSTROUTING -t nat -s 192.168.222.0/24 ! -d 192.168.222.0/24 -o ${default_route_interface} -j MASQUERADE
     done
 }
@@ -130,8 +130,28 @@ function install_openshift_client() {
     tar -C /usr/local/bin -xzf tmp/openshift-client-linux.tar.gz
 }
 
+function download_rhcos_iso_via_ocp() {
+    if ! command -v jq >/dev/null 2>&1; then
+        "jq not installed!"
+        exit 1
+    fi
+    expected_checksum=`openshift-install coreos print-stream-json | jq -r '.architectures.x86_64.artifacts.metal.formats.iso.disk.sha256'`
+    if [[ -f tmp/rhcos-live.x86_64.iso ]]; then
+        if echo "${DOLLAR}{expected_checksum} tmp/rhcos-live.x86_64.iso" | sha256sum --check --status; then
+            return
+        fi
+    fi
+    url=`openshift-install coreos print-stream-json | jq -r '.architectures.x86_64.artifacts.metal.formats.iso.disk.location'`
+    curl -L -o tmp/rhcos-live.x86_64.iso "${DOLLAR}{url}"
+}
+
 function download_rhcos_iso() {
     mkdir -p tmp
+    if [[ "${rcos_iso_url}" == "null" ]]; then
+        # download url is not provided, get it via openshift-installer
+        download_rhcos_iso_via_ocp
+        return
+    fi
     if [[ -f tmp/rhcos-live.x86_64.iso ]]; then
         expected_checksum=`curl -sS ${rcos_iso_url}/sha256sum.txt | grep rhcos-live.x86_64.iso | cut -d ' ' -f 1`
         if echo "${DOLLAR}{expected_checksum} tmp/rhcos-live.x86_64.iso" | sha256sum --check --status; then
@@ -213,7 +233,7 @@ function cleanup_vm() {
 
 function start_vm() {
     cleanup_vm 
-    virt-install -n ${sno_name} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=12288 --vcpus=4 --network bridge=baremetal,mac=${pxe_mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough
+    virt-install -n ${sno_name} --pxe --os-type=Linux --os-variant=rhel8.0 --ram=16384 --vcpus=4 --network bridge=baremetal,mac=${pxe_mac} --disk size=120,bus=scsi,sparse=yes --check disk_size=off --noautoconsole --cpu host-passthrough
     while true; do
         sleep 3
         if ! virsh domstate ${sno_name} | grep running; then

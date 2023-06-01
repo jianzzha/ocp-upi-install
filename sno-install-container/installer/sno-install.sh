@@ -75,15 +75,17 @@ fi
 export client_version=$(yq -r .client_version setup.conf.yaml)
 
 rhcos_version=$(yq -r '.rhcos_version' setup.conf.yaml)
-rhcos_major_rel=`echo ${rhcos_version} | awk -F. '{print $1"."$2}'`
-rhcos_minor_rel=${rhcos_version}
-
-coreos_image_base_url=$(yq -r '.coreos_image_base_url' setup.conf.yaml)
-if [[ -z "${coreos_image_base_url}" ]]; then
-    coreos_image_base_url="https://mirror.openshift.com/pub/openshift-v4/x86_64/dependencies/rhcos"
+if [[ -z ${rhcos_version} || "${rhcos_version}" == "null" ]]; then
+    export rcos_iso_url="null"
+else
+    rhcos_major_rel=`echo ${rhcos_version} | awk -F. '{print $1"."$2}'`
+    rhcos_minor_rel=${rhcos_version}
+    coreos_image_base_url=$(yq -r '.coreos_image_base_url' setup.conf.yaml)
+    if [[ -z "${coreos_image_base_url}" ]]; then
+        coreos_image_base_url="https://mirror.openshift.com/pub/openshift-v4/x86_64/dependencies/rhcos"
+    fi
+    export rcos_iso_url="${coreos_image_base_url}/${rhcos_major_rel}/${rhcos_minor_rel}"
 fi
-export rcos_iso_url="${coreos_image_base_url}/${rhcos_major_rel}/${rhcos_minor_rel}"
-
 # generate install-config.yaml
 mkdir -p ../config/ssh
 if [[ ! -e ../config/ssh/id_rsa || ! -e ../config/ssh/id_rsa.pub ]]; then
