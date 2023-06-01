@@ -217,8 +217,8 @@ function start_vm() {
 
 function until_first_boot_complete() {
 if ! command -v nc >/dev/null 2>&1; then
-    echo "nc command not available, sleep 10 minutes in stead ..."
-    sleep 10m
+    echo "nc command not available, sleep 20 minutes in stead ..."
+    sleep 20m
 else
     while ! nc -zvw10 ${sno_ip} 6443; do
         sleep 5
