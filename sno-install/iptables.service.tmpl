@@ -1,9 +1,0 @@
-[Unit]
-Description=Setup openshift iptables
-[Service]
-ExecStart=/usr/local/bin/ocp-iptables.sh
-Type=oneshot
-RemainAfterExit=true
-[Install]
-WantedBy=multi-user.target
-

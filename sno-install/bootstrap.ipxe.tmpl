@@ -1,5 +1,0 @@
-#!ipxe
-
-ifconf --configurator dhcp net0
-
-sanboot --no-describe http://192.168.222.1:${http_port}/rhcos-live.x86_64.iso || goto shell
