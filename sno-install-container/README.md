@@ -21,8 +21,8 @@ Add `setup.conf.yaml` in the `config` directory. A sample example of `setup.conf
 client_base_url: 'https://mirror.openshift.com/pub/openshift-v4/clients/ocp'
 coreos_image_base_url: "https://mirror.openshift.com/pub/openshift-v4/x86_64/dependencies/rhcos"
 client_version: 4.12.0
-rhcos_major_rel: 4.12
-rhcos_minor_rel: 4.12.0
+# rhcos_version is only necessary if the coreos version is different than the ocp version
+rhcos_version: 4.12.10
 
 # provision host settings
 baremetal_phy_int: ens3f0
@@ -40,6 +40,7 @@ first_ipxe_interface: net4
 # dnsmasq settings
 pxe_mac: "f0:b2:b9:04:9b:60"
 sno_name: dut
+base_domain: myocp4.com
 
 # idrac setting
 uefi: false
