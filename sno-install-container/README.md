@@ -2,8 +2,11 @@
 
 ## Build the container image
 
+An existing sno-installer container image is available to download from `quay.io/jianzzha/sno-installer`.
+
+If the user is interested to build a local image,
 ```
-podman build -t quay.io/jianzzha/sno-installer
+podman build -t sno-installer
 ```
 
 ## Create config artifacts 
@@ -57,7 +60,7 @@ pull_secret: 'pull secret aquired from https://console.redhat.com/openshift/inst
 Run the container image to generate artifacts,
 
 ```
-podman run --privileged --net=host -v $PWD/config:/home/config --rm -it quay.io/jianzzha/sno-installer
+podman run --privileged --net=host -v $PWD/config:/home/config --rm -it sno-installer
 ```
 
 ## Intsall SNO
