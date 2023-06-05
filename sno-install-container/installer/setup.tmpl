@@ -313,6 +313,7 @@ if [[ ${DOLLAR}{use_vm:-"false"} == "true" ]]; then
 else   
     start_pxe_boot
 fi
+sleep 10
 until_first_boot_complete
 openshift-install --dir=ocp wait-for install-complete
 
