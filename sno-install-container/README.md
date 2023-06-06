@@ -38,9 +38,9 @@ disk: /dev/sda
 #disk: /dev/nvme0n1
 #http_proxy: "http://<your_proxy_ip>:<your_proxy_port>
 # OCP has a default no_proxy list which normally works, this no_proxy setting is an extra list
-i#no_proxy: "192.168.222.0/24"
+#no_proxy: "192.168.222.0/24"
 
-# ipxe settings
+# first ipxe interface. Here we want to try from net4 first; otherwise it will default from net0 first
 first_ipxe_interface: net4
 
 # dnsmasq settings
