@@ -6,7 +6,7 @@ An existing sno-installer container image is available to download from `quay.io
 
 If the user is interested to build a local image,
 ```
-podman build -t sno-installer
+podman build -t sno-installer .
 ```
 
 ## Create config artifacts 
